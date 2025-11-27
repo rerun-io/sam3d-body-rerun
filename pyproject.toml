@@ -55,6 +55,7 @@ monopriors = { git = "https://github.com/pablovela5620/monoprior.git" }
 
 [tool.pixi.tasks]
 app = "python tool/gradio_sam3d_body.py"
+cli = "python tool/demo.py --image-folder data/example-data"
 
 [tool.pixi.feature.cuda129.system-requirements]
 cuda = "12.9"

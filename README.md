@@ -45,6 +45,12 @@ Opens the Gradio UI with an embedded streaming Rerun viewer. Try the bundled sam
 
 ### CLI
 From a dev shell (for tyro + dev deps):
+```
+pixi run cli
+```
+
+OR
+
 ```bash
 pixi shell -e dev
 python tool/demo.py --help
