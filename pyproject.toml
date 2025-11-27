@@ -1,0 +1,148 @@
+[project]
+authors = [{ name = "pablo vela", email = "pablovela5620@gmail.com" }]
+dependencies = [
+    "jaxtyping<0.3.0",
+    "numpy>=2.0",
+    "einops>=0.8.0",
+    "icecream>=2.1.3",
+    "opencv-python>=4.10.0",
+    "pyserde>=0.20.0",
+    "rerun-sdk>=0.27.0",
+    "tyro>=0.9.1",
+    "tqdm",
+    "hf-transfer>=0.1.9",
+    "lovely-numpy>=0.2.13,<0.3",
+    "pandas>=2.3.3",
+    "braceexpand>=0.1.7,<0.2",
+    "roma>=1.5.4,<2",
+    "pytorch-lightning>=2.5.6,<3",
+    "yacs>=0.1.8,<0.2",
+    "omegaconf>=2.3.0,<3",
+    "termcolor>=3.2.0,<4",
+    "gradio-rerun>=0.27.0",
+    "spaces>=0.43.0",
+]
+name = "sam3d_body"
+requires-python = ">= 3.12"
+version = "0.1.0"
+
+
+[build-system]
+build-backend = "hatchling.build"
+requires = ["hatchling"]
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.pixi.workspace]
+channels = ["conda-forge"]
+platforms = ["linux-64"]
+preview = ["pixi-build"]
+
+[tool.pixi.pypi-options]
+no-build-isolation = ["detectron2", "moge"]
+[tool.pixi.pypi-options.dependency-overrides]
+# Allow iopath >=0.1.10 even though detectron2 pins <0.1.10, so it can satisfy sam-2.
+iopath = ">=0.1.10"
+gradio = ">=5.45.0,<6"
+[tool.pixi.pypi-dependencies]
+sam3d_body = { path = ".", editable = true }
+moge = { git = "https://github.com/microsoft/MoGe.git" }
+simplecv = { git = "https://github.com/pablovela5620/simplecv.git", branch = "main" }
+timm = ">=0.9"
+transformers = { git = "https://github.com/huggingface/transformers.git", rev = "main" }
+monopriors = { git = "https://github.com/pablovela5620/monoprior.git" }
+
+[tool.pixi.tasks]
+app = "python tool/gradio_sam3d_body.py"
+
+[tool.pixi.feature.cuda129.system-requirements]
+cuda = "12.9"
+
+[tool.pixi.feature.cuda129.dependencies]
+# CUDA Build Tools
+cuda-compiler = "*"
+cuda-version = "12.9.*"
+cuda-cudart-dev = "*"
+cuda-crt = "*"
+libcusparse-dev = "*"
+cuda-driver-dev = "*"
+cuda-nvcc = "*"
+cuda-nvrtc-dev = "*"
+cuda-nvtx = "*"
+cuda-nvtx-dev = "*"
+cuda-nvml-dev = "*"
+cuda-profiler-api = "*"
+
+# CUDA Libraries
+cudnn = "*"
+libcublas-dev = "*"
+libcudss-dev = "*"
+libcufile-dev = "*"
+libcufft-dev = "*"
+libcurand-dev = "*"
+libcusolver-dev = "*"
+cusparselt = "*"
+libnvjitlink = "*"
+# cuda129 end
+
+[tool.pixi.feature.gpu.dependencies]
+pytorch-gpu = ">=2.8.0"
+torchvision = "*"
+
+
+[tool.pixi.feature.dev.dependencies]
+beartype = "*"
+pyrefly = ">=0.42.2,<0.43"
+ruff = ">=0.14.5,<0.15"
+
+[tool.pixi.feature.dev.pypi-dependencies]
+types-tqdm = "*"
+
+[tool.pixi.environments]
+cuda128 = { features = [
+    "cuda129",
+], solve-group = "cuda129", no-default-feature = true }
+default = { features = ["gpu", "cuda129"], solve-group = "cuda129" }
+dev = { features = ["dev", "gpu", "cuda129"], solve-group = "cuda129" }
+
+[tool.pixi.dependencies]
+av = ">=16.0.1,<17"
+gradio = ">=5.45.0,<6"
+huggingface_hub = ">=1.0,<2"
+tomlkit = "==0.12.0"
+audioop-lts = "*"
+pydub = "*"
+open3d = ">=0.19.0,<0.20"
+
+[tool.ruff]
+line-length = 150
+
+[tool.ruff.lint]
+select = [
+    # pycodestyle
+    "E",
+    # Pyflakes
+    "F",
+    # pyupgrade
+    "UP",
+    # flake8-bugbear
+    "B",
+    # flake8-simplify
+    "SIM",
+    # isort
+    "I",
+]
+
+ignore = [
+    "E501",  # Line too long.
+    "F722",  # Forward annotation false positive from jaxtyping. Should be caught by pyright.
+    "F821",  # Forward annotation false positive from jaxtyping. Should be caught by pyright.
+    "UP037", # Remove quotes from type, false positive when using jaxtyping
+    "UP040", # Beartype fails if not using this for typealias
+
+]
+
+[tool.pyrefly]
+project-includes = ["**/*"]
+project-excludes = ["**/node_modules", "**/__pycache__", "**/*venv/**/*"]
