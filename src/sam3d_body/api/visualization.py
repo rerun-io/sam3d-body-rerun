@@ -108,6 +108,68 @@ def compute_vertex_normals(
     return vn_unit
 
 
+def export_meshes_to_glb(
+    pred_list: list[FinalPosePrediction],
+    faces: Int[ndarray, "n_faces 3"],
+    output_dir: Path,
+    box_palette: UInt8[ndarray, "n_colors 4"] = BOX_PALETTE,
+    center_mesh: bool = True,
+) -> list[Path]:
+    """Write one GLB per predicted mesh and return the file paths."""
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    written_paths: list[Path] = []
+    faces_int: Int[ndarray, "n_faces 3"] = np.ascontiguousarray(faces, dtype=np.int32)
+
+    for idx, output in enumerate(pred_list):
+        verts_cam: Float32[ndarray, "n_verts 3"] = np.ascontiguousarray(output.pred_vertices, dtype=np.float32)
+        cam_t: Float32[ndarray, "3"] = np.ascontiguousarray(output.pred_cam_t, dtype=np.float32)
+        # Convert to world coordinates to mirror the viewer logging convention (cam → world via translation).
+        verts_world: Float32[ndarray, "n_verts 3"] = np.ascontiguousarray(verts_cam + cam_t, dtype=np.float32)
+        verts_export: Float32[ndarray, "n_verts 3"]
+        verts_export = verts_world - np.mean(verts_world, axis=0, keepdims=True) if center_mesh else verts_world
+
+        vertex_normals: Float32[ndarray, "n_verts 3"] = compute_vertex_normals(verts_export, faces_int)
+
+        mesh = o3d.geometry.TriangleMesh()
+        mesh.vertices = o3d.utility.Vector3dVector(verts_export.astype(np.float64))
+        mesh.triangles = o3d.utility.Vector3iVector(faces_int.astype(np.int32))
+        mesh.vertex_normals = o3d.utility.Vector3dVector(vertex_normals.astype(np.float64))
+
+        color: Float32[ndarray, "3"] = box_palette[idx % len(box_palette), :3].astype(np.float32) / 255.0
+        vertex_colors: Float32[ndarray, "n_verts 3"] = np.repeat(color[np.newaxis, :], verts_export.shape[0], axis=0)
+        mesh.vertex_colors = o3d.utility.Vector3dVector(vertex_colors.astype(np.float64))
+
+        glb_path: Path = output_dir / f"person_{idx:02d}.glb"
+        success: bool = bool(
+            o3d.io.write_triangle_mesh(
+                str(glb_path),
+                mesh,
+                write_ascii=False,
+                write_vertex_normals=True,
+                write_vertex_colors=True,
+            )
+        )
+        if not success:
+            fallback_path: Path = output_dir / f"person_{idx:02d}.ply"
+            success = bool(
+                o3d.io.write_triangle_mesh(
+                    str(fallback_path),
+                    mesh,
+                    write_ascii=False,
+                    write_vertex_normals=True,
+                    write_vertex_colors=True,
+                )
+            )
+            if success:
+                glb_path = fallback_path
+
+        if success:
+            written_paths.append(glb_path)
+
+    return written_paths
+
+
 def set_annotation_context() -> None:
     """Register MHR-70 semantic metadata so subsequent logs show names/edges and mask colors."""
     # Base person class (for keypoints / boxes) uses id=0 (original), segmentation uses 1000+ to avoid clashes.

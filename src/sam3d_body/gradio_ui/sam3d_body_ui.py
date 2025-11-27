@@ -6,6 +6,7 @@ visualization across multiple Gradio tabs using Rerun's recording and visualizat
 """
 
 import os
+import shutil
 import tempfile
 from pathlib import Path
 from typing import Final
@@ -21,7 +22,7 @@ from monopriors.relative_depth_models import RelativeDepthPrediction
 from numpy import ndarray
 
 from sam3d_body.api.demo import SAM3Config, SAM3DBodyE2E, SAM3DBodyE2EConfig, create_view, set_annotation_context
-from sam3d_body.api.visualization import visualize_sample
+from sam3d_body.api.visualization import export_meshes_to_glb, visualize_sample
 from sam3d_body.sam_3d_body_estimator import FinalPosePrediction
 
 CFG: SAM3DBodyE2EConfig = SAM3DBodyE2EConfig(sam3_config=SAM3Config())
@@ -38,13 +39,15 @@ gr.set_static_paths([str(TEST_INPUT_DIR)])
 @spaces.GPU()
 @rr.thread_local_stream("sam3d_body_gradio_ui")
 def sam3d_prediction_fn(
-    rgb_hw3: UInt8[ndarray, "h w 3"],
-    log_relative_depth: bool,
-    pending_cleanup: list[str] | None = None,
-) -> tuple[str, str]:
+    rgb_hw3,
+    log_relative_depth,
+    export_glb,
+    center_glb,
+    pending_cleanup=None,
+) -> tuple[str, str, list[str]]:
     # resize rgb so that its largest dimension is 1024
-    rgb_hw3 = cv2.resize(
-        rgb_hw3,
+    rgb_hw3: UInt8[ndarray, "h w 3"] = cv2.resize(
+        rgb_hw3,  # type: ignore[arg-type]
         dsize=(0, 0),
         fx=1024 / max(rgb_hw3.shape[0], rgb_hw3.shape[1]),
         fy=1024 / max(rgb_hw3.shape[0], rgb_hw3.shape[1]),
@@ -76,12 +79,33 @@ def sam3d_prediction_fn(
         relative_depth_pred=relative_pred if log_relative_depth else None,
     )
 
-    return temp.name, STATE
+    glb_files: list[str] = []
+    if export_glb and len(pred_list) > 0:
+        glb_dir: Path = Path(tempfile.mkdtemp(prefix="sam3d_glb_"))
+        glb_paths = export_meshes_to_glb(
+            pred_list=pred_list,
+            faces=mesh_faces,
+            output_dir=glb_dir,
+            center_mesh=center_glb,
+        )
+        glb_files = [str(p) for p in glb_paths]
+        if pending_cleanup is not None:
+            pending_cleanup.extend(glb_files)
+            pending_cleanup.append(str(glb_dir))
+
+    return temp.name, STATE, glb_files
 
 
 def cleanup_rrds(pending_cleanup: list[str]) -> None:
     for f in pending_cleanup:
-        os.unlink(f)
+        if os.path.isdir(f):
+            shutil.rmtree(f, ignore_errors=True)
+        elif os.path.isfile(f):
+            os.unlink(f)
+
+
+def _switch_to_outputs() -> gr.Tabs:
+    return gr.update(selected="outputs")
 
 
 def main():
@@ -99,30 +123,42 @@ def main():
         pending_cleanup = gr.State([], time_to_live=10, delete_callback=cleanup_rrds)
         with gr.Row():
             with gr.Column(scale=1):
-                img = gr.Image(interactive=True, label="Image", type="numpy", image_mode="RGB")
-                depth_checkbox = gr.Checkbox(label="Log relative depth", value=False)
-                create_rrd = gr.Button("Predict Pose")
-                status = gr.Text(STATE, label="Status")
+                tabs = gr.Tabs(selected="inputs")
+                with tabs:
+                    with gr.TabItem("Inputs", id="inputs"):
+                        img = gr.Image(interactive=True, label="Image", type="numpy", image_mode="RGB")
+                        depth_checkbox = gr.Checkbox(label="Log relative depth", value=False)
+                        with gr.Row():
+                            export_checkbox = gr.Checkbox(label="Export GLB meshes", value=False)
+                            center_checkbox = gr.Checkbox(label="Center GLB at origin", value=True)
+                        create_rrd = gr.Button("Predict Pose")
+                    with gr.TabItem("Outputs", id="outputs"):
+                        status = gr.Text(STATE, label="Status")
+                        mesh_files = gr.Files(label="GLB meshes", file_count="multiple")
                 gr.Examples(
                     examples=[
-                        [str(TEST_INPUT_DIR / "Planche.jpg"), True],
-                        [str(TEST_INPUT_DIR / "Amir-Khan-Lamont-Peterson_2689582.jpg"), False],
-                        [str(TEST_INPUT_DIR / "BNAAHPYGMYSE26U6C6T7VA6544.jpg"), False],
-                        [str(TEST_INPUT_DIR / "yoga-example.jpg"), True],
+                        [str(TEST_INPUT_DIR / "Planche.jpg"), True, False, True],
+                        [str(TEST_INPUT_DIR / "Amir-Khan-Lamont-Peterson_2689582.jpg"), False, False, True],
+                        [str(TEST_INPUT_DIR / "BNAAHPYGMYSE26U6C6T7VA6544.jpg"), False, True, True],
+                        [str(TEST_INPUT_DIR / "yoga-example.jpg"), True, True, False],
                     ],
-                    inputs=[img, depth_checkbox],
-                    outputs=[viewer, status],
+                    inputs=[img, depth_checkbox, export_checkbox, center_checkbox],
+                    outputs=[viewer, status, mesh_files],
                     fn=sam3d_prediction_fn,
                     run_on_click=True,
                     cache_examples=False,
                     examples_per_page=2,
                 )
-
             with gr.Column(scale=5):
                 viewer.render()
+
         create_rrd.click(
+            fn=_switch_to_outputs,
+            inputs=None,
+            outputs=[tabs],
+        ).then(
             sam3d_prediction_fn,
-            inputs=[img, depth_checkbox, pending_cleanup],
-            outputs=[viewer, status],
+            inputs=[img, depth_checkbox, export_checkbox, center_checkbox, pending_cleanup],
+            outputs=[viewer, status, mesh_files],
         )
     return demo
