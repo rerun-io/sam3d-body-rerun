@@ -25,7 +25,15 @@ An unofficial playground for Meta's SAM3D Body (DINOv3) with promptable SAM3 mas
 ### Using Pixi
 Make sure you have the [Pixi](https://pixi.sh/latest/#installation) package manager installed.
 
+TL;DR install Pixi:
+```bash
+curl -fsSL https://pixi.sh/install.sh | sh
+```
+Restart your shell so the new `pixi` binary is on `PATH`.
+
 This is Linux only with an NVIDIA GPU.
+
+The SAM3 and SAM3D Body checkpoints are gated on Hugging Face—request access for both [facebook/sam-3d-body-dinov3](https://huggingface.co/facebook/sam-3d-body-dinov3) and [facebook/sam3](https://huggingface.co/facebook/sam3), then authenticate either by setting `HF_TOKEN=<your token>` or running `huggingface-cli login` before the first download (see Meta's install notes).
 
 First run will download HF checkpoints for SAM3, SAM3D Body, and the relative-depth model.
 ```bash
