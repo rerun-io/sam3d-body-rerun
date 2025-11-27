@@ -105,8 +105,8 @@ def main():
                 status = gr.Text(STATE, label="Status")
                 gr.Examples(
                     examples=[
-                        [str(TEST_INPUT_DIR / "Amir-Khan-Lamont-Peterson_2689582.jpg"), False],
                         [str(TEST_INPUT_DIR / "Planche.jpg"), True],
+                        [str(TEST_INPUT_DIR / "Amir-Khan-Lamont-Peterson_2689582.jpg"), False],
                         [str(TEST_INPUT_DIR / "BNAAHPYGMYSE26U6C6T7VA6544.jpg"), False],
                         [str(TEST_INPUT_DIR / "yoga-example.jpg"), True],
                     ],

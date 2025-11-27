@@ -220,7 +220,6 @@ __marimo__/
 !.pixi/config.toml
 
 _checkpoints/*
-data/*
 
 
 # START Ruler Generated Files
