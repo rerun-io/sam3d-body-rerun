@@ -605,7 +605,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/d6/14/fc04d491527b774ec7479897f5861959209de1480e4c4cd32ed098ff8bea/timm-1.0.22-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/d0/c6/dc3a0db5a6766416c32c034286d7c2d406da1f498e4de04ab1b8959edd00/tokenizers-0.22.1-cp39-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/02/21/aa0f434434c48490f91b65962b1ce863fdcce63febc166ca9fe9d706c2b6/torchmetrics-1.8.2-py3-none-any.whl
-      - pypi: git+https://github.com/huggingface/transformers.git?rev=main#d08b98b965176ea9cf8c8e8b24995c955b7e2ec9
+      - pypi: git+https://github.com/huggingface/transformers.git?rev=d08b98b965176ea9cf8c8e8b24995c955b7e2ec9#d08b98b965176ea9cf8c8e8b24995c955b7e2ec9
       - pypi: https://files.pythonhosted.org/packages/ec/81/951a108396aa850a096be95cd9ccd38ef9f33ae35b40b512be975e2c994d/trimesh-4.10.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/3a/7a/882d99539b19b1490cac5d77c67338d126e4122c8276bf640e411650c830/twine-6.2.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/1b/a9/e3aee762739c1d7528da1c3e06d518503f8b6c439c35549b53735ba52ead/typeguard-4.4.4-py3-none-any.whl
@@ -1134,7 +1134,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/d6/14/fc04d491527b774ec7479897f5861959209de1480e4c4cd32ed098ff8bea/timm-1.0.22-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/d0/c6/dc3a0db5a6766416c32c034286d7c2d406da1f498e4de04ab1b8959edd00/tokenizers-0.22.1-cp39-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/02/21/aa0f434434c48490f91b65962b1ce863fdcce63febc166ca9fe9d706c2b6/torchmetrics-1.8.2-py3-none-any.whl
-      - pypi: git+https://github.com/huggingface/transformers.git?rev=main#d08b98b965176ea9cf8c8e8b24995c955b7e2ec9
+      - pypi: git+https://github.com/huggingface/transformers.git?rev=d08b98b965176ea9cf8c8e8b24995c955b7e2ec9#d08b98b965176ea9cf8c8e8b24995c955b7e2ec9
       - pypi: https://files.pythonhosted.org/packages/ec/81/951a108396aa850a096be95cd9ccd38ef9f33ae35b40b512be975e2c994d/trimesh-4.10.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/3a/7a/882d99539b19b1490cac5d77c67338d126e4122c8276bf640e411650c830/twine-6.2.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/1b/a9/e3aee762739c1d7528da1c3e06d518503f8b6c439c35549b53735ba52ead/typeguard-4.4.4-py3-none-any.whl
@@ -7179,7 +7179,7 @@ packages:
 - pypi: ./
   name: sam3d-body
   version: 0.1.0
-  sha256: 9657ff6dce1aaa478b47d12ee6362808f5c69c51c6d41eb3a2c7ac3e6060a02c
+  sha256: 7c410588d14ed4e106a0d2dded8ec72f9dfd4bc58dceea0731b17e4beb983b6f
   requires_dist:
   - jaxtyping<0.3.0
   - numpy>=2.0
@@ -7827,7 +7827,7 @@ packages:
   - pkg:pypi/tqdm?source=hash-mapping
   size: 89498
   timestamp: 1735661472632
-- pypi: git+https://github.com/huggingface/transformers.git?rev=main#d08b98b965176ea9cf8c8e8b24995c955b7e2ec9
+- pypi: git+https://github.com/huggingface/transformers.git?rev=d08b98b965176ea9cf8c8e8b24995c955b7e2ec9#d08b98b965176ea9cf8c8e8b24995c955b7e2ec9
   name: transformers
   version: 5.0.0.dev0
   requires_dist:

@@ -50,7 +50,7 @@ sam3d_body = { path = ".", editable = true }
 moge = { git = "https://github.com/microsoft/MoGe.git" }
 simplecv = { git = "https://github.com/pablovela5620/simplecv.git", branch = "main" }
 timm = ">=0.9"
-transformers = { git = "https://github.com/huggingface/transformers.git", rev = "main" }
+transformers = { git = "https://github.com/huggingface/transformers.git", rev = "d08b98b965176ea9cf8c8e8b24995c955b7e2ec9" }
 monopriors = { git = "https://github.com/pablovela5620/monoprior.git" }
 
 [tool.pixi.tasks]
