@@ -121,6 +121,34 @@ def main():
 
     with gr.Blocks() as demo, gr.Tab("SAM3D Body Estimation"):
         pending_cleanup = gr.State([], time_to_live=10, delete_callback=cleanup_rrds)
+        gr.Markdown(
+            """
+# SAM3D Body with Rerun
+An unofficial playground for Meta's SAM3D Body (DINOv3) with promptable SAM3 masks and live Rerun visualization. Uses **Rerun** for 3D inspection, **Gradio** for the UI, and **Pixi** for one-command setup.
+
+<div style="display:flex; gap:8px; justify-content:center; align-items:center; flex-wrap:wrap; margin:12px 0;">
+  <a title="Rerun" href="https://rerun.io" target="_blank" rel="noopener noreferrer">
+    <img src="https://img.shields.io/badge/Rerun-0.27%2B-0b82f9" alt="Rerun badge">
+  </a>
+  <a title="Pixi" href="https://pixi.sh/latest/" target="_blank" rel="noopener noreferrer">
+    <img src="https://img.shields.io/badge/Install%20with-Pixi-16A34A" alt="Pixi badge">
+  </a>
+  <a title="CUDA" href="https://developer.nvidia.com/cuda-toolkit" target="_blank" rel="noopener noreferrer">
+    <img src="https://img.shields.io/badge/CUDA-12.9%2B-76b900" alt="CUDA badge">
+  </a>
+  <a title="GitHub" href="https://github.com/rerun-io/sam3d-body-rerun" target="_blank" rel="noopener noreferrer">
+    <img src="https://img.shields.io/github/stars/rerun-io/sam3d-body-rerun?label=GitHub%20%E2%98%85&logo=github&color=C8C" alt="GitHub stars">
+  </a>
+</div>
+            """
+        )
+        gr.HTML(
+            """
+<style>
+.sam3d-viewer-col { margin-top: 20px; }
+</style>
+            """
+        )
         with gr.Row():
             with gr.Column(scale=1):
                 tabs = gr.Tabs(selected="inputs")
@@ -149,7 +177,7 @@ def main():
                     cache_examples=False,
                     examples_per_page=2,
                 )
-            with gr.Column(scale=5):
+            with gr.Column(scale=5, elem_classes=["sam3d-viewer-col"]):
                 viewer.render()
 
         create_rrd.click(
