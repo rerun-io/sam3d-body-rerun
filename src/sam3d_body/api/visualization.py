@@ -329,7 +329,7 @@ def visualize_sample(
         rr.log(f"{pred_log_path}/segmentation_ids", rr.SegmentationImage(seg_map))
         rr.log(f"{pred_log_path}/segmentation_overlay", rr.Image(seg_overlay, color_model=rr.ColorModel.RGBA))
 
-    # Optionally log depth and a background-only point cloud (for 3D view only).
+    # Optionally log depth-derived point clouds (full / background-only / people-only).
     if relative_depth_pred is not None:
         depth_hw: Float32[ndarray, "h w"] = np.asarray(relative_depth_pred.depth, dtype=np.float32)
         conf_hw: Float32[ndarray, "h w"] = np.asarray(relative_depth_pred.confidence, dtype=np.float32)
@@ -339,19 +339,21 @@ def visualize_sample(
             conf_hw = cv2.resize(conf_hw, (w, h), interpolation=cv2.INTER_NEAREST)
         depth_hw = np.nan_to_num(depth_hw, nan=0.0, posinf=0.0, neginf=0.0)
 
-        # Remove flying pixels along depth discontinuities.
+        depth_log_root: Path = parent_log_path / "depth"
+        rr.log(str(depth_log_root), rr.Clear(recursive=True))
+
+        # Remove flying pixels along depth discontinuities and low-confidence pixels.
         edges_mask: Bool[ndarray, "h w"] = depth_edges_mask(depth_hw, threshold=0.01)
         depth_hw = depth_hw * np.logical_not(edges_mask)
 
-        # Remove low-confidence pixels.
         conf_mask: Bool[ndarray, "h w"] = conf_hw >= MIN_DEPTH_CONFIDENCE
-        depth_hw = depth_hw * conf_mask
+        depth_full: Float32[ndarray, "h w"] = depth_hw * conf_mask
 
         background_mask: Bool[ndarray, "h w"] = np.logical_not(human_mask)
-        depth_bg: Float32[ndarray, "h w"] = depth_hw * background_mask
+        depth_background: Float32[ndarray, "h w"] = depth_full * background_mask
+        depth_foreground: Float32[ndarray, "h w"] = depth_full * human_mask
 
-        # Log depth image (not referenced by the 2D blueprint).
-        # rr.log(f"{pinhole_log_path}/depth", rr.DepthImage(depth_bg, meter=1.0))
+        # Skip logging depth images; keep point clouds only to visualize full/background/foreground variants.
 
         fx: float = float(relative_depth_pred.K_33[0, 0])
         fy: float = float(relative_depth_pred.K_33[1, 1])
@@ -364,16 +366,22 @@ def visualize_sample(
         vv: Float32[ndarray, "h w"]
         uu, vv = np.meshgrid(u, v)
 
-        z_cam: Float32[ndarray, "h w"] = depth_bg
-        valid: Bool[ndarray, "h w"] = np.logical_and(z_cam > 0.0, np.isfinite(z_cam))
-        if np.any(valid):
-            x_cam: Float32[ndarray, "h w"] = (uu - cx) * z_cam / fx
-            y_cam: Float32[ndarray, "h w"] = (vv - cy) * z_cam / fy
-            points_cam: Float32[ndarray, "h w 3"] = np.stack([x_cam, y_cam, z_cam], axis=-1)
+        z_cam: Float32[ndarray, "h w"] = depth_full
+        valid_depth: Bool[ndarray, "h w"] = np.logical_and(z_cam > 0.0, np.isfinite(z_cam))
 
-            points_flat: Float32[ndarray, "n_valid 3"] = points_cam[valid]
-            colors_flat: UInt8[ndarray, "n_valid 3"] = rgb_hw3[valid]
+        x_cam: Float32[ndarray, "h w"] = (uu - cx) * z_cam / fx
+        y_cam: Float32[ndarray, "h w"] = (vv - cy) * z_cam / fy
+        points_cam: Float32[ndarray, "h w 3"] = np.stack([x_cam, y_cam, z_cam], axis=-1)
 
+        def log_depth_point_cloud(valid_mask: Bool[ndarray, "h w"], name: str) -> None:
+            if not np.any(valid_mask):
+                return
+
+            points_flat: Float32[ndarray, "n_valid 3"] = points_cam[valid_mask]
+            colors_flat: UInt8[ndarray, "n_valid 3"] = rgb_hw3[valid_mask]
+
+            points_ds: Float32[ndarray, "n_valid 3"] = points_flat
+            colors_ds: UInt8[ndarray, "n_valid 3"] = colors_flat
             if points_flat.shape[0] > MAX_POINT_CLOUD_POINTS:
                 voxel_size: float = estimate_voxel_size(
                     points_flat, target_points=MAX_POINT_CLOUD_POINTS, tolerance=0.25
@@ -382,19 +390,23 @@ def visualize_sample(
                 pcd.points = o3d.utility.Vector3dVector(points_flat)
                 pcd.colors = o3d.utility.Vector3dVector(colors_flat.astype(np.float32) / 255.0)
                 pcd_ds: o3d.geometry.PointCloud = pcd.voxel_down_sample(voxel_size)
-                points_flat = np.asarray(pcd_ds.points, dtype=np.float32)
-                colors_flat = (np.asarray(pcd_ds.colors, dtype=np.float32) * 255.0).astype(np.uint8)
+                points_ds = np.asarray(pcd_ds.points, dtype=np.float32)
+                colors_ds = (np.asarray(pcd_ds.colors, dtype=np.float32) * 255.0).astype(np.uint8)
 
             rr.log(
-                f"{parent_log_path}/depth_point_cloud",
+                f"{depth_log_root}/{name}_point_cloud",
                 rr.Points3D(
-                    positions=points_flat,
-                    colors=colors_flat,
+                    positions=points_ds,
+                    colors=colors_ds,
                 ),
             )
 
+        log_depth_point_cloud(valid_mask=valid_depth, name="full_depth")
+        log_depth_point_cloud(valid_mask=np.logical_and(valid_depth, background_mask), name="background_depth")
+        log_depth_point_cloud(valid_mask=np.logical_and(valid_depth, human_mask), name="foreground_depth")
 
-def create_view() -> rrb.ContainerLike:
+
+def create_view(log_depth: bool = True) -> rrb.ContainerLike:
     view_2d = rrb.Vertical(
         contents=[
             # Top: people-only overlay on the RGB image.
@@ -419,7 +431,52 @@ def create_view() -> rrb.ContainerLike:
             ),
         ],
     )
-    view_3d = rrb.Spatial3DView(name="mhr_3d", line_grid=rrb.LineGrid3D(visible=False))
-    main_view = rrb.Horizontal(contents=[view_2d, view_3d], column_shares=[2, 3])
+    if not log_depth:
+        view_3d = rrb.Spatial3DView(
+            name="mhr_3d",
+            line_grid=rrb.LineGrid3D(visible=False),
+        )
+        main_view = rrb.Horizontal(contents=[view_2d, view_3d], column_shares=[2, 3])
+        return rrb.Tabs(contents=[main_view], name="sam-3d-body-demo")
+
+    view_3d_full = rrb.Spatial3DView(
+        name="Depth (full)",
+        origin="/world",
+        contents=[
+            "/world/cam/**",
+            "/world/pred/**",
+            "/world/depth/full_depth_point_cloud",
+        ],
+        line_grid=rrb.LineGrid3D(visible=False),
+    )
+
+    view_3d_background = rrb.Spatial3DView(
+        name="Depth (background)",
+        origin="/world",
+        contents=[
+            "/world/cam/**",
+            "/world/pred/**",
+            "/world/depth/background_depth_point_cloud",
+        ],
+        line_grid=rrb.LineGrid3D(visible=False),
+    )
+
+    view_3d_foreground = rrb.Spatial3DView(
+        name="Depth (foreground)",
+        origin="/world",
+        contents=[
+            "/world/cam/**",
+            "/world/pred/**",
+            "/world/depth/foreground_depth_point_cloud",
+        ],
+        line_grid=rrb.LineGrid3D(visible=False),
+    )
+
+    depth_tabs = rrb.Tabs(
+        name="3D depth views",
+        contents=[view_3d_full, view_3d_background, view_3d_foreground],
+    )
+
+    main_view = rrb.Horizontal(contents=[view_2d, depth_tabs], column_shares=[2, 3])
     view = rrb.Tabs(contents=[main_view], name="sam-3d-body-demo")
     return view

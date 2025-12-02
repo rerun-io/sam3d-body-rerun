@@ -189,7 +189,7 @@ def main(cfg: Sam3DBodyDemoConfig):
     # Setup Rerun
     parent_log_path = Path("/world")
     set_annotation_context()
-    view: rrb.ContainerLike = create_view()
+    view: rrb.ContainerLike = create_view(log_depth=True)
     blueprint = rrb.Blueprint(view, collapse_panels=True)
     rr.send_blueprint(blueprint)
     rr.log("/", rr.ViewCoordinates.RDF, static=True)

@@ -60,7 +60,7 @@ def sam3d_prediction_fn(
     if pending_cleanup is not None:
         pending_cleanup.append(temp.name)
 
-    view: rrb.ContainerLike = create_view()
+    view: rrb.ContainerLike = create_view(log_relative_depth)
     blueprint = rrb.Blueprint(view, collapse_panels=True)
     rr.save(path=temp.name, default_blueprint=blueprint)
     set_annotation_context()
@@ -125,6 +125,8 @@ def main():
             """
 # SAM3D Body with Rerun
 An unofficial playground for Meta's SAM3D Body (DINOv3) with promptable SAM3 masks and live Rerun visualization. Uses **Rerun** for 3D inspection, **Gradio** for the UI, and **Pixi** for one-command setup.
+
+When "Log relative depth" is enabled, the 3D panel switches to tabbed views for full, background-only, and people-only depth point clouds.
 
 <div style="display:flex; gap:8px; justify-content:center; align-items:center; flex-wrap:wrap; margin:12px 0;">
   <a title="Rerun" href="https://rerun.io" target="_blank" rel="noopener noreferrer">
