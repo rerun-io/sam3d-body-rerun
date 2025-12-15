@@ -116,6 +116,9 @@ def _make_blueprint(exo_cam_names: list[str], max_exo_views: Literal[4, 8] = 8) 
         origin="/",
         name="3D View",
         spatial_information=rrb.SpatialInformation(show_axes=True),
+        eye_controls=rrb.EyeControls3D(
+            kind="Orbital", position=[0.0, 1.5, 1.5], look_target=[0, 0, 0.3], spin_speed=0.5
+        ),
     )
 
     if exo_cam_names:
@@ -139,7 +142,9 @@ def _make_blueprint(exo_cam_names: list[str], max_exo_views: Literal[4, 8] = 8) 
                 )
             )
 
+        prompt_view = rrb.TextDocumentView()
         exo_view = rrb.Horizontal(contents=exo_tabs_row)
+        main_view = rrb.Horizontal(contents=[prompt_view, main_view], column_shares=[1, 10])
         main_view = rrb.Vertical(contents=[main_view, exo_view], row_shares=[4, 1])
 
     container: rrb.ContainerLike = main_view
@@ -315,6 +320,8 @@ def main(cfg: Sam3MVImageDemoConfig) -> None:
     predictor = _Sam3ImagePredictor(cfg.model_config)
 
     parent_log_path: Path = Path("world")
+
+    rr.log("text-prompt", rr.TextDocument(f"## Prompt\n\n{cfg.prompt}", media_type="text/markdown"), static=True)
 
     exo_cam_names: list[str] = [cam.name for cam in sequence.exo_sequence.exo_cam_list] if sequence.exo_sequence else []
     exo_depth_list: list[UInt16[ndarray, "h w"]] | None = sample.exo_depth_list
