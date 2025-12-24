@@ -74,7 +74,6 @@ rm data/sample.zip)
 mv-video-demo = { cmd = """
 python tool/demo_mv_video.py \
     --max-frames 100 \
-    --rr-config.connect \
     hocap \
     --root-directory data/sample \
     --subject-id 8 \
