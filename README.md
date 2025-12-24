@@ -78,6 +78,10 @@ pixi run mv-video-demo
 ```
 Downloads sample data (~1.7GB) on first run and processes 100 frames across 8 cameras, visualizing segmentation overlays and a fused 3D mesh in Rerun. Requires ~3GB VRAM.
 
+<p align="center">
+  <img src="media/mv-video-demo.gif" alt="multiview video demo" width="720" />
+</p>
+
 ## Acknowledgements
 Thanks to the original projects that make this demo possible:
 
