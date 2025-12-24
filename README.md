@@ -71,6 +71,13 @@ If you just want SAM3 masks without 3D reconstruction:
 pixi run -e dev python tool/gradio_sam3.py
 ```
 
+### Multiview Video Demo
+Process multiview HoCap video sequences with SAM3 segmentation and TSDF mesh fusion:
+```bash
+pixi run mv-video-demo
+```
+Downloads sample data (~1.7GB) on first run and processes 100 frames across 8 cameras, visualizing segmentation overlays and a fused 3D mesh in Rerun. Requires ~3GB VRAM.
+
 ## Acknowledgements
 Thanks to the original projects that make this demo possible:
 

@@ -60,6 +60,29 @@ datasets = ">=2.20"
 app = "python tool/gradio_sam3d_body.py"
 cli = "python tool/demo.py --image-folder data/example-data"
 
+# Download hocap sample data from HuggingFace (cached based on output directory)
+_download-hocap-sample = { cmd = """
+test -d data/sample || \
+(huggingface-cli download pablovela5620/hocap-sample sample.zip --repo-type dataset --local-dir data && \
+unzip -o data/sample.zip -d data && \
+rm data/sample.zip)
+""", outputs = [
+    "data/sample/",
+] }
+
+# Run multiview video demo with sample data
+mv-video-demo = { cmd = """
+python tool/demo_mv_video.py \
+    --max-frames 100 \
+    --rr-config.connect \
+    hocap \
+    --root-directory data/sample \
+    --subject-id 8 \
+    --sequence-name 20231024_180733
+""", depends-on = [
+    "_download-hocap-sample",
+], description = "Run multiview video SAM3 segmentation demo with TSDF fusion" }
+
 [tool.pixi.feature.cuda129.system-requirements]
 cuda = "12.9"
 

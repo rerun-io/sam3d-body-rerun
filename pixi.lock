@@ -7544,7 +7544,7 @@ packages:
 - pypi: ./
   name: sam3d-body
   version: 0.1.0
-  sha256: 4f0f91f0ef9b35734ab2b6b651dbe5ffb59b302b5f7e904b3ea85db4927b3bc9
+  sha256: 52fa62328abc039569e0be4072b7df7dcb05a539223f038395a5f3ccd91de224
   requires_dist:
   - jaxtyping<0.3.0
   - numpy>=2.0

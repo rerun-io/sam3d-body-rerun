@@ -219,6 +219,8 @@ __marimo__/
 .pixi/*
 !.pixi/config.toml
 
+data/*
+
 _checkpoints/*
 
 
