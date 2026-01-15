@@ -622,7 +622,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/92/dd/c1f5b0890f7b5db661bde0864b41cb0275be76851047e5f7e085fe0b455a/timm-1.0.24-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/2e/76/932be4b50ef6ccedf9d3c6639b056a967a86258c6d9200643f01269211ca/tokenizers-0.22.2-cp39-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/02/21/aa0f434434c48490f91b65962b1ce863fdcce63febc166ca9fe9d706c2b6/torchmetrics-1.8.2-py3-none-any.whl
-      - pypi: git+https://github.com/huggingface/transformers.git?rev=d08b98b965176ea9cf8c8e8b24995c955b7e2ec9#d08b98b965176ea9cf8c8e8b24995c955b7e2ec9
+      - pypi: https://files.pythonhosted.org/packages/b4/eb/9526a77354a2126f5b220f4792dc8494d573773c098dac6a5ad1fc7a5f17/transformers-5.0.0rc2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/23/cc/5056718bf473be51712ecf74800093a13d69c576f1ca0e0f3cf4684567cf/trimesh-4.11.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/3a/7a/882d99539b19b1490cac5d77c67338d126e4122c8276bf640e411650c830/twine-6.2.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/1b/a9/e3aee762739c1d7528da1c3e06d518503f8b6c439c35549b53735ba52ead/typeguard-4.4.4-py3-none-any.whl
@@ -1167,7 +1167,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/92/dd/c1f5b0890f7b5db661bde0864b41cb0275be76851047e5f7e085fe0b455a/timm-1.0.24-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/2e/76/932be4b50ef6ccedf9d3c6639b056a967a86258c6d9200643f01269211ca/tokenizers-0.22.2-cp39-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/02/21/aa0f434434c48490f91b65962b1ce863fdcce63febc166ca9fe9d706c2b6/torchmetrics-1.8.2-py3-none-any.whl
-      - pypi: git+https://github.com/huggingface/transformers.git?rev=d08b98b965176ea9cf8c8e8b24995c955b7e2ec9#d08b98b965176ea9cf8c8e8b24995c955b7e2ec9
+      - pypi: https://files.pythonhosted.org/packages/b4/eb/9526a77354a2126f5b220f4792dc8494d573773c098dac6a5ad1fc7a5f17/transformers-5.0.0rc2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/23/cc/5056718bf473be51712ecf74800093a13d69c576f1ca0e0f3cf4684567cf/trimesh-4.11.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/3a/7a/882d99539b19b1490cac5d77c67338d126e4122c8276bf640e411650c830/twine-6.2.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/1b/a9/e3aee762739c1d7528da1c3e06d518503f8b6c439c35549b53735ba52ead/typeguard-4.4.4-py3-none-any.whl
@@ -7541,14 +7541,14 @@ packages:
 - pypi: ./
   name: sam3d-body
   version: 0.1.0
-  sha256: 859cecb639939af31e2e7f632363717a845f03d87bcf0ca27e425c7462577103
+  sha256: 540b895fc0d1a1ffc6e5af2057f6334c2e4f9dbde51e2076af176f95aa4c4fe7
   requires_dist:
   - jaxtyping<0.3.0
   - numpy>=2.0
   - einops>=0.8.0
   - icecream>=2.1.3
   - pyserde>=0.20.0
-  - rerun-sdk>=0.28.0,<0.29
+  - rerun-sdk>=0.28.1
   - tyro>=0.9.1
   - tqdm
   - hf-transfer>=0.1.9
@@ -7560,7 +7560,7 @@ packages:
   - yacs>=0.1.8,<0.2
   - omegaconf>=2.3.0,<3
   - termcolor>=3.2.0,<4
-  - gradio-rerun>=0.28.0,<0.29
+  - gradio-rerun>=0.28.1
   - spaces>=0.43.0
   requires_python: '>=3.12'
 - pypi: https://files.pythonhosted.org/packages/d1/fe/66d73b76d378ba8cc2fe605920c0c75092e3a65ae746e1e767d9d020a75a/scipy-1.17.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl
@@ -8177,12 +8177,13 @@ packages:
   - pkg:pypi/tqdm?source=hash-mapping
   size: 89498
   timestamp: 1735661472632
-- pypi: git+https://github.com/huggingface/transformers.git?rev=d08b98b965176ea9cf8c8e8b24995c955b7e2ec9#d08b98b965176ea9cf8c8e8b24995c955b7e2ec9
+- pypi: https://files.pythonhosted.org/packages/b4/eb/9526a77354a2126f5b220f4792dc8494d573773c098dac6a5ad1fc7a5f17/transformers-5.0.0rc2-py3-none-any.whl
   name: transformers
-  version: 5.0.0.dev0
+  version: 5.0.0rc2
+  sha256: f8f2a14060ab11f20a0eec39d827af54c1589c327c5799d82808ae3f4167418a
   requires_dist:
   - filelock
-  - huggingface-hub>=1.0.0,<2.0
+  - huggingface-hub>=1.2.1,<2.0
   - numpy>=1.17
   - packaging>=20.0
   - pyyaml>=5.1
@@ -8241,7 +8242,7 @@ packages:
   - phonemizer ; extra == 'torch-speech'
   - kenlm ; extra == 'torch-speech'
   - pillow>=10.0.1,<=15.0 ; extra == 'vision'
-  - timm!=1.0.18,<=1.0.19 ; extra == 'timm'
+  - timm>=1.0.23 ; extra == 'timm'
   - torchvision ; extra == 'torch-vision'
   - pillow>=10.0.1,<=15.0 ; extra == 'torch-vision'
   - natten>=0.14.6,<0.15.0 ; extra == 'natten'
@@ -8356,7 +8357,7 @@ packages:
   - kernels>=0.10.2,<0.11 ; extra == 'all'
   - optuna ; extra == 'all'
   - ray[tune]>=2.7.0 ; extra == 'all'
-  - timm!=1.0.18,<=1.0.19 ; extra == 'all'
+  - timm>=1.0.23 ; extra == 'all'
   - torchvision ; extra == 'all'
   - pillow>=10.0.1,<=15.0 ; extra == 'all'
   - codecarbon>=2.8.1 ; extra == 'all'
@@ -8417,7 +8418,7 @@ packages:
   - kernels>=0.10.2,<0.11 ; extra == 'dev-torch'
   - optuna ; extra == 'dev-torch'
   - ray[tune]>=2.7.0 ; extra == 'dev-torch'
-  - timm!=1.0.18,<=1.0.19 ; extra == 'dev-torch'
+  - timm>=1.0.23 ; extra == 'dev-torch'
   - torchvision ; extra == 'dev-torch'
   - pillow>=10.0.1,<=15.0 ; extra == 'dev-torch'
   - codecarbon>=2.8.1 ; extra == 'dev-torch'
@@ -8452,7 +8453,7 @@ packages:
   - kernels>=0.10.2,<0.11 ; extra == 'dev'
   - optuna ; extra == 'dev'
   - ray[tune]>=2.7.0 ; extra == 'dev'
-  - timm!=1.0.18,<=1.0.19 ; extra == 'dev'
+  - timm>=1.0.23 ; extra == 'dev'
   - torchvision ; extra == 'dev'
   - pillow>=10.0.1,<=15.0 ; extra == 'dev'
   - codecarbon>=2.8.1 ; extra == 'dev'
@@ -8516,7 +8517,7 @@ packages:
   - scikit-learn ; extra == 'dev'
   - cookiecutter==1.7.3 ; extra == 'dev'
   - filelock ; extra == 'torchhub'
-  - huggingface-hub>=1.0.0,<2.0 ; extra == 'torchhub'
+  - huggingface-hub>=1.2.1,<2.0 ; extra == 'torchhub'
   - importlib-metadata ; extra == 'torchhub'
   - numpy>=1.17 ; extra == 'torchhub'
   - packaging>=20.0 ; extra == 'torchhub'
