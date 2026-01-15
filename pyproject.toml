@@ -6,7 +6,7 @@ dependencies = [
     "einops>=0.8.0",
     "icecream>=2.1.3",
     "pyserde>=0.20.0",
-    "rerun-sdk>=0.27.3",
+    "rerun-sdk>=0.28.0,<0.29",
     "tyro>=0.9.1",
     "tqdm",
     "hf-transfer>=0.1.9",
@@ -18,7 +18,7 @@ dependencies = [
     "yacs>=0.1.8,<0.2",
     "omegaconf>=2.3.0,<3",
     "termcolor>=3.2.0,<4",
-    "gradio-rerun>=0.27.0",
+    "gradio-rerun>=0.28.0,<0.29",
     "spaces>=0.43.0",
 ]
 name = "sam3d_body"
@@ -43,8 +43,8 @@ no-build-isolation = ["detectron2", "moge"]
 [tool.pixi.pypi-options.dependency-overrides]
 # Allow iopath >=0.1.10 even though detectron2 pins <0.1.10, so it can satisfy sam-2.
 iopath = ">=0.1.10"
-gradio = ">=5.45.0,<6"
-rerun-sdk = ">=0.27.3"
+gradio = ">=6.0.0,<7"
+rerun-sdk = ">=0.28.0,<0.29"
 
 [tool.pixi.pypi-dependencies]
 sam3d_body = { path = ".", editable = true }
@@ -137,7 +137,7 @@ dev = { features = ["dev", "gpu", "cuda129"], solve-group = "cuda129" }
 
 [tool.pixi.dependencies]
 av = ">=16.0.1,<17"
-gradio = ">=5.45.0,<6"
+gradio = ">=6.0.0,<7"
 huggingface_hub = ">=1.0,<2"
 tomlkit = "==0.12.0"
 audioop-lts = "*"
