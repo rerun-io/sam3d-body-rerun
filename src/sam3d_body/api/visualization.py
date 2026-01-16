@@ -34,6 +34,8 @@ BOX_PALETTE: UInt8[np.ndarray, "n_colors 4"] = np.array(
 SEG_CLASS_OFFSET = 1000  # background = 1000, persons start at 1001
 MAX_POINT_CLOUD_POINTS = 50_000
 MIN_DEPTH_CONFIDENCE = 0.5
+SEG_OVERLAY_ALPHA: int = 242  # ~0.95 opacity (242/255)
+"""Alpha value for segmentation mask overlay (0-255). Higher = more opaque."""
 
 
 def filter_out_of_bounds(
@@ -181,13 +183,19 @@ def set_annotation_context() -> None:
 
     # Segmentation classes: id=SEG_CLASS_OFFSET background, ids SEG_CLASS_OFFSET+1..n for each instance color.
     seg_classes: list[rr.ClassDescription] = [
-        rr.ClassDescription(info=rr.AnnotationInfo(id=SEG_CLASS_OFFSET, label="Background", color=(64, 64, 64))),
+        rr.ClassDescription(info=rr.AnnotationInfo(id=SEG_CLASS_OFFSET, label="Background", color=(64, 64, 64, 0))),
     ]
     for idx, color in enumerate(BOX_PALETTE[:, :3].tolist(), start=1):
+        color_rgba: tuple[int, int, int, int] = (
+            int(color[0]),  # type: ignore[arg-type]  # numpy .tolist() lacks type stubs
+            int(color[1]),  # type: ignore[arg-type]
+            int(color[2]),  # type: ignore[arg-type]
+            SEG_OVERLAY_ALPHA,
+        )
         seg_classes.append(
             rr.ClassDescription(
                 info=rr.AnnotationInfo(
-                    id=SEG_CLASS_OFFSET + idx, label=f"Person-{idx}", color=tuple(int(c) for c in color)
+                    id=SEG_CLASS_OFFSET + idx, label=f"Person-{idx}", color=color_rgba
                 ),
             )
         )
@@ -235,9 +243,8 @@ def visualize_sample(
     rr.log(f"{pred_log_path}", rr.Clear(recursive=True))
     rr.log(f"{image_log_path}", rr.Image(rgb_hw3, color_model=rr.ColorModel.RGB).compress(jpeg_quality=90))
 
-    # Build per-pixel maps (SEG_CLASS_OFFSET = background). Also build RGBA overlay with transparent background.
+    # Build per-pixel segmentation map (SEG_CLASS_OFFSET = background).
     seg_map: Int[ndarray, "h w"] = np.full((h, w), SEG_CLASS_OFFSET, dtype=np.int32)
-    seg_overlay: UInt8[ndarray, "h w 4"] = np.zeros((h, w, 4), dtype=np.uint8)
     human_mask: Bool[ndarray, "h w"] = np.zeros((h, w), dtype=bool)
 
     mesh_root_path: Path = parent_log_path / "pred"
@@ -287,10 +294,6 @@ def visualize_sample(
             seg_id = SEG_CLASS_OFFSET + i + 1  # keep person class (0) separate from seg classes
             seg_map = np.where(mask_bool, np.uint16(seg_id), seg_map)
 
-            # Color overlay for this instance, background stays transparent.
-            color = BOX_PALETTE[i % len(BOX_PALETTE), :3]
-            seg_overlay[mask_bool] = np.array([color[0], color[1], color[2], 120], dtype=np.uint8)
-
         # Log 3D keypoints in world coordinates
         cam_t: Float32[ndarray, "3"] = np.ascontiguousarray(output.pred_cam_t, dtype=np.float32)
         kpts_world: Float32[ndarray, "n_kpts 3"] = np.ascontiguousarray(kpts_cam + cam_t, dtype=np.float32)
@@ -324,10 +327,9 @@ def visualize_sample(
             ),
         )
 
-    # Log segmentation ids (full map) and an RGBA overlay with transparent background.
+    # Log segmentation ids (class-based map with colors from AnnotationContext).
     if np.any(seg_map != SEG_CLASS_OFFSET):
         rr.log(f"{pred_log_path}/segmentation_ids", rr.SegmentationImage(seg_map))
-        rr.log(f"{pred_log_path}/segmentation_overlay", rr.Image(seg_overlay, color_model=rr.ColorModel.RGBA))
 
     # Optionally log depth-derived point clouds (full / background-only / people-only).
     if relative_depth_pred is not None:
@@ -415,7 +417,7 @@ def create_view(log_depth: bool = True) -> rrb.ContainerLike:
                 origin="/world/cam/pinhole",
                 contents=[
                     "/world/cam/pinhole/image",
-                    "/world/cam/pinhole/pred/segmentation_overlay",
+                    "/world/cam/pinhole/pred/segmentation_ids",
                 ],
             ),
             # Bottom: 2D boxes + keypoints; segmentation hidden.
@@ -425,7 +427,6 @@ def create_view(log_depth: bool = True) -> rrb.ContainerLike:
                 contents=[
                     "/world/cam/pinhole/image",
                     "/world/cam/pinhole/pred/**",
-                    "- /world/cam/pinhole/pred/segmentation_overlay/**",
                     "- /world/cam/pinhole/pred/segmentation_ids/**",
                 ],
             ),

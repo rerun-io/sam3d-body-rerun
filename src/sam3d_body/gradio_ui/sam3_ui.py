@@ -19,6 +19,7 @@ from jaxtyping import Bool, Float32, Int, UInt8
 from numpy import ndarray
 
 from sam3d_body.api.demo import SAM3Config, SAM3Predictor, SAM3Results
+from sam3d_body.api.visualization import SEG_OVERLAY_ALPHA
 
 CFG: SAM3Config = SAM3Config()
 MODEL_E2E: SAM3Predictor = SAM3Predictor(config=CFG)
@@ -77,7 +78,7 @@ def sam3d_prediction_fn(
             name="Image + Segmentation",
             contents=[
                 "image",
-                "image/segmentation_overlay",
+                "image/segmentation_ids",
             ],
         ),
         collapse_panels=True,
@@ -92,7 +93,6 @@ def sam3d_prediction_fn(
     h: int = int(img.shape[0])
     w: int = int(img.shape[1])
     seg_map: Int[np.ndarray, "h w"] = np.zeros((h, w), dtype=np.uint16)
-    seg_overlay: UInt8[np.ndarray, "h w 4"] = np.zeros((h, w, 4), dtype=np.uint8)
 
     # Build a single segmentation image where each instance gets a unique id.
     for idx, segmask in enumerate(sam3_results.masks):
@@ -101,22 +101,24 @@ def sam3d_prediction_fn(
         class_id: int = idx + 1  # reserve 0 for background
         seg_map = np.where(mask_bool, np.uint16(class_id), seg_map)
 
-        color: UInt8[np.ndarray, "4"] = BOX_PALETTE[idx % BOX_PALETTE.shape[0]]
-        seg_overlay[mask_bool] = np.array([color[0], color[1], color[2], 120], dtype=np.uint8)
-
     class_descriptions: list[rr.ClassDescription] = [
-        rr.ClassDescription(info=rr.AnnotationInfo(id=0, label="Background", color=(64, 64, 64)))
+        rr.ClassDescription(info=rr.AnnotationInfo(id=0, label="Background", color=(64, 64, 64, 0)))
     ]
     for idx, color_rgb in enumerate(BOX_PALETTE[:, :3].tolist(), start=1):
+        color_rgba: tuple[int, int, int, int] = (
+            int(color_rgb[0]),  # type: ignore[arg-type]  # numpy .tolist() lacks type stubs
+            int(color_rgb[1]),  # type: ignore[arg-type]
+            int(color_rgb[2]),  # type: ignore[arg-type]
+            SEG_OVERLAY_ALPHA,
+        )
         class_descriptions.append(
             rr.ClassDescription(
-                info=rr.AnnotationInfo(id=idx, label=f"Mask-{idx}", color=tuple(int(c) for c in color_rgb))
+                info=rr.AnnotationInfo(id=idx, label=f"Mask-{idx}", color=color_rgba)
             )
         )
 
     rec.log("/", rr.AnnotationContext(class_descriptions), static=True)
     rec.log("image/segmentation_ids", rr.SegmentationImage(seg_map))
-    rec.log("image/segmentation_overlay", rr.Image(seg_overlay, color_model=rr.ColorModel.RGBA))
     yield stream.read(), RUNNING_STATUS
 
 

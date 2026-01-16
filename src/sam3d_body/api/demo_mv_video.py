@@ -26,9 +26,7 @@ from simplecv.rerun_log_utils import RerunTyroConfig, log_pinhole
 from tqdm import tqdm
 from transformers import Sam3VideoConfig, Sam3VideoModel, Sam3VideoProcessor
 
-from sam3d_body.api.visualization import BOX_PALETTE
-
-SEG_OVERLAY_ALPHA: int = 80
+from sam3d_body.api.visualization import BOX_PALETTE, SEG_OVERLAY_ALPHA
 
 
 @dataclass(slots=True)
@@ -119,7 +117,6 @@ def _make_blueprint(exo_cam_names: list[str], max_exo_views: Literal[4, 8] = 8) 
                             name=f"exo/{name}",
                             contents=[
                                 f"{origin_base}/image",
-                                f"{origin_base}/segmentation_overlay",
                                 f"{origin_base}/segmentation_ids",
                                 f"{origin_base}/boxes",
                             ],
@@ -149,11 +146,13 @@ def _log_annotation_context() -> None:
     class_descriptions: list[rr.ClassDescription] = [
         rr.ClassDescription(info=rr.AnnotationInfo(id=0, label="Background", color=(64, 64, 64, 0)))
     ]
-    for idx, color_rgb in enumerate(BOX_PALETTE[:, :3].tolist(), start=1):
+    num_colors: int = BOX_PALETTE.shape[0]
+    for idx in range(1, num_colors + 1):
+        rgb: UInt8[ndarray, "3"] = BOX_PALETTE[(idx - 1) % num_colors, :3]
         color_rgba: tuple[int, int, int, int] = (
-            int(color_rgb[0]),
-            int(color_rgb[1]),
-            int(color_rgb[2]),
+            int(rgb[0]),
+            int(rgb[1]),
+            int(rgb[2]),
             SEG_OVERLAY_ALPHA,
         )
         class_descriptions.append(
@@ -180,11 +179,10 @@ def _prepare_segmentation_assets(
     processed_outputs: dict,
 ) -> tuple[
     UInt16[ndarray, "h w"],
-    UInt8[ndarray, "h w 4"],
     Float32[ndarray, "n 4"] | None,
     Float32[ndarray, "n"] | None,
 ]:
-    """Convert SAM3 outputs into segmentation IDs, overlay, and boxes."""
+    """Convert SAM3 outputs into segmentation IDs and boxes."""
     raw_masks = processed_outputs.get("masks")
     raw_boxes = processed_outputs.get("boxes")
     raw_scores = processed_outputs.get("scores")
@@ -194,7 +192,6 @@ def _prepare_segmentation_assets(
         w: int = int(frame_rgb.shape[1])
         return (
             np.zeros((h, w), dtype=np.uint16),
-            np.zeros((h, w, 4), dtype=np.uint8),
             None,
             None,
         )
@@ -206,22 +203,14 @@ def _prepare_segmentation_assets(
     h = int(frame_rgb.shape[0])
     w = int(frame_rgb.shape[1])
     seg_map: UInt16[ndarray, "h w"] = np.zeros((h, w), dtype=np.uint16)
-    seg_overlay: UInt8[ndarray, "h w 4"] = np.zeros((h, w, 4), dtype=np.uint8)
 
     num_instances: int = int(masks_np.shape[0])
-    colors: UInt8[ndarray, "k 4"] = np.asarray(
-        [BOX_PALETTE[idx % BOX_PALETTE.shape[0]] for idx in range(num_instances)],
-        dtype=np.uint8,
-    )
 
     for idx in range(num_instances):
         mask: Float32[ndarray, "h w"] = np.asarray(masks_np[idx], dtype=np.float32)
         mask_bool: Bool[ndarray, "h w"] = mask >= 0.5
         class_id: int = idx + 1
-
         seg_map = np.where(mask_bool, np.uint16(class_id), seg_map)
-        color: UInt8[ndarray, "4"] = colors[idx]
-        seg_overlay[mask_bool] = np.array([color[0], color[1], color[2], SEG_OVERLAY_ALPHA], dtype=np.uint8)
 
     boxes_np: Float32[ndarray, "n 4"] | None = None
     scores_np: Float32[ndarray, "n"] | None = None
@@ -232,7 +221,7 @@ def _prepare_segmentation_assets(
     if raw_scores is not None:
         scores_np = _to_numpy(raw_scores).astype(np.float32, copy=False).reshape(-1)
 
-    return seg_map, seg_overlay, boxes_np, scores_np
+    return seg_map, boxes_np, scores_np
 
 
 def _colorize_segmentation(
@@ -257,18 +246,13 @@ def _log_camera_outputs(
     frame_idx: int,
     frame_bgr: UInt8[ndarray, "h w 3"],
     seg_map: UInt16[ndarray, "h w"],
-    seg_overlay: UInt8[ndarray, "h w 4"],
     boxes: Float32[ndarray, "n 4"] | None,
     scores: Float32[ndarray, "n"] | None,
 ) -> None:
     """Log per-camera image, segmentation, and boxes."""
     rr.set_time("frame_idx", sequence=frame_idx)
     rr.log(f"{pinhole_path}/image", rr.Image(frame_bgr, color_model=rr.ColorModel.BGR).compress(jpeg_quality=85))
-    # rr.log(f"{pinhole_path}/segmentation_ids", rr.SegmentationImage(seg_map))
-    rr.log(
-        f"{pinhole_path}/segmentation_overlay",
-        rr.Image(seg_overlay, color_model=rr.ColorModel.RGBA, opacity=0.99)
-    )
+    rr.log(f"{pinhole_path}/segmentation_ids", rr.SegmentationImage(seg_map))
 
     if boxes is None:
         return
@@ -374,7 +358,7 @@ def main(cfg: Sam3MVVideoDemoConfig) -> None:
                     original_sizes=inputs.original_sizes,
                 )
 
-                seg_map, seg_overlay, boxes, scores = _prepare_segmentation_assets(frame_rgb, processed_outputs)
+                seg_map, boxes, scores = _prepare_segmentation_assets(frame_rgb, processed_outputs)
                 pinhole_path: Path = parent_log_path / "exo" / cam_params.name / "pinhole"
 
                 _log_camera_outputs(
@@ -382,7 +366,6 @@ def main(cfg: Sam3MVVideoDemoConfig) -> None:
                     frame_idx=frame_idx,
                     frame_bgr=frame_bgr,
                     seg_map=seg_map,
-                    seg_overlay=seg_overlay,
                     boxes=boxes,
                     scores=scores,
                 )

@@ -29,7 +29,7 @@ from simplecv.rerun_log_utils import RerunTyroConfig, log_video
 from tqdm import tqdm
 from transformers import Sam3VideoConfig, Sam3VideoModel, Sam3VideoProcessor
 
-from sam3d_body.api.visualization import BOX_PALETTE
+from sam3d_body.api.visualization import BOX_PALETTE, SEG_OVERLAY_ALPHA
 
 if TYPE_CHECKING:
     from transformers.models.sam3_video.processing_sam3_video import Sam3VideoInferenceSession
@@ -37,9 +37,6 @@ if TYPE_CHECKING:
 # ──────────────────────────────────────────────────────────────────────────────
 # Constants
 # ──────────────────────────────────────────────────────────────────────────────
-
-SEG_OVERLAY_ALPHA: int = 242  # ~0.95 opacity (242/255)
-"""Alpha value for segmentation mask overlay (0-255). Higher = more opaque."""
 
 BOX_DRAW_ORDER: int = 6
 """Rerun draw order for bounding boxes (above segmentation)."""

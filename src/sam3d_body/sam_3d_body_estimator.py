@@ -1,4 +1,20 @@
-"""Core inference utilities for SAM 3D Body model (hands + body fusion)."""
+"""Core inference utilities for SAM 3D Body model (hands + body fusion).
+
+This module provides:
+
+- ``PoseOutputsNP``: Batched outputs from the model forward pass (internal)
+- ``FinalPosePrediction``: Per-person prediction container for downstream use
+- ``SAM3DBodyEstimator``: Main inference wrapper handling preprocessing and postprocessing
+
+Coordinate Convention:
+    All 3D outputs use OpenCV camera coordinates:
+
+    - X: right
+    - Y: down
+    - Z: forward (into the scene)
+
+    Camera intrinsics follow ``cam_T_world`` notation per project standards.
+"""
 
 from collections.abc import Callable
 from typing import Any, Literal, cast
@@ -113,7 +129,51 @@ class FinalPosePrediction:
     """Optional right-hand XYXY box in the original image (pixels)."""
 
 
-Transform = Callable[[dict], dict | None]
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
+
+DEFAULT_INPUT_SIZE: int = 512
+"""Target size for affine-transformed input crops (pixels)."""
+
+DEFAULT_HAND_PADDING: float = 0.9
+"""Bounding box expansion factor for hand crops."""
+
+DEFAULT_WRIST_ANGLE_THRESHOLD: float = 1.4
+"""Threshold (radians) for wrist angle used in hand detection."""
+
+
+# ---------------------------------------------------------------------------
+# Types
+# ---------------------------------------------------------------------------
+
+Transform = Callable[[dict[str, Any]], dict[str, Any] | None]
+"""Preprocessing transform: takes a data sample dict and returns the transformed version."""
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _compute_hand_bbox(
+    center: Float[Tensor, "2"],
+    scale: Float[Tensor, "2"],
+) -> Float[ndarray, "4"]:
+    """Compute XYXY bounding box from center/scale representation.
+
+    Args:
+        center: Center point of the hand crop ``[cx, cy]``.
+        scale: Width and height of the bounding box ``[w, h]``.
+
+    Returns:
+        XYXY bounding box in pixel coordinates.
+    """
+    half_w: float = (scale[0] / 2).item()
+    half_h: float = (scale[1] / 2).item()
+    cx: float = center[0].item()
+    cy: float = center[1].item()
+    return np.array([cx - half_w, cy - half_h, cx + half_w, cy + half_h], dtype=np.float32)
 
 
 class SAM3DBodyEstimator:
@@ -129,7 +189,7 @@ class SAM3DBodyEstimator:
             sam_3d_body_model: Loaded ``SAM3DBody`` instance (checkpoints already restored).
         """
         self.model: SAM3DBody = sam_3d_body_model
-        self.thresh_wrist_angle: float = 1.4
+        self.thresh_wrist_angle: float = DEFAULT_WRIST_ANGLE_THRESHOLD
 
         # For mesh visualization
         self.faces: Int[ndarray, "n_faces=36874 3"] = self.model.head_pose.faces.cpu().numpy()  # type: ignore
@@ -137,12 +197,12 @@ class SAM3DBodyEstimator:
         # Define transforms
         body_transforms: list[Transform] = [
             cast(Transform, GetBBoxCenterScale()),
-            cast(Transform, TopdownAffine(input_size=512, use_udp=False)),
+            cast(Transform, TopdownAffine(input_size=DEFAULT_INPUT_SIZE, use_udp=False)),
             cast(Transform, VisionTransformWrapper(ToTensor())),
         ]
         hand_transforms: list[Transform] = [
-            cast(Transform, GetBBoxCenterScale(padding=0.9)),
-            cast(Transform, TopdownAffine(input_size=512, use_udp=False)),
+            cast(Transform, GetBBoxCenterScale(padding=DEFAULT_HAND_PADDING)),
+            cast(Transform, TopdownAffine(input_size=DEFAULT_INPUT_SIZE, use_udp=False)),
             cast(Transform, VisionTransformWrapper(ToTensor())),
         ]
 
@@ -202,7 +262,8 @@ class SAM3DBodyEstimator:
         # Handle camera intrinsics
         # - either provided externally or generated via default FOV estimator
         if K_33 is None:
-            print("")
+            # Model uses default FOV heuristic from cam_int set in prepare_batch
+            pass
         else:
             K_b33: Float[Tensor, "b=1 3 3"] = torch.as_tensor(
                 K_33[np.newaxis, ...], device=batch_img.device, dtype=batch_img.dtype
@@ -254,27 +315,13 @@ class SAM3DBodyEstimator:
             )
 
             if inference_type == "full" and batch_lhand is not None and batch_rhand is not None:
-                lhand_center = batch_lhand["bbox_center"].flatten(0, 1)[idx]
-                lhand_scale = batch_lhand["bbox_scale"].flatten(0, 1)[idx]
-                pred.lhand_bbox = np.array(
-                    [
-                        (lhand_center[0] - lhand_scale[0] / 2).item(),
-                        (lhand_center[1] - lhand_scale[1] / 2).item(),
-                        (lhand_center[0] + lhand_scale[0] / 2).item(),
-                        (lhand_center[1] + lhand_scale[1] / 2).item(),
-                    ]
-                )
+                lhand_center: Float[Tensor, "2"] = batch_lhand["bbox_center"].flatten(0, 1)[idx]
+                lhand_scale: Float[Tensor, "2"] = batch_lhand["bbox_scale"].flatten(0, 1)[idx]
+                pred.lhand_bbox = _compute_hand_bbox(lhand_center, lhand_scale)
 
-                rhand_center = batch_rhand["bbox_center"].flatten(0, 1)[idx]
-                rhand_scale = batch_rhand["bbox_scale"].flatten(0, 1)[idx]
-                pred.rhand_bbox = np.array(
-                    [
-                        (rhand_center[0] - rhand_scale[0] / 2).item(),
-                        (rhand_center[1] - rhand_scale[1] / 2).item(),
-                        (rhand_center[0] + rhand_scale[0] / 2).item(),
-                        (rhand_center[1] + rhand_scale[1] / 2).item(),
-                    ]
-                )
+                rhand_center: Float[Tensor, "2"] = batch_rhand["bbox_center"].flatten(0, 1)[idx]
+                rhand_scale: Float[Tensor, "2"] = batch_rhand["bbox_scale"].flatten(0, 1)[idx]
+                pred.rhand_bbox = _compute_hand_bbox(rhand_center, rhand_scale)
 
             all_out.append(pred)
 
