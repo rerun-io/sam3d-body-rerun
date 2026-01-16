@@ -564,7 +564,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/02/10/5da547df7a391dcde17f59520a231527b8571e6f46fc8efb02ccb370ab12/docutils-0.22.4-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/87/62/9773de14fe6c45c23649e98b83231fffd7b9892b6cf863251dc2afa73643/einops-0.8.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/c1/ea/53f2148663b321f21b5a606bd5f191517cf40b7072c0497d3c92c4a13b1e/executing-2.2.1-py2.py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/a4/d2/8fdcb8d7c41cb3e5c6716ccd24ef9b4f600a210f0ff4e28305c6a9cc491f/fastcore-1.11.4-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/32/1b/a4441ae2aeee581cae7f79ccde6307768fd3b5252c84afa6cc44088a7d33/fastcore-1.12.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/e8/2d/d2a548598be01649e2d46231d151a6c56d10b964d94043a335ae56ea2d92/flatbuffers-25.12.19-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/ed/1f/95cb961341bf33e534a472672ef4916c90046dc3c57b1442f5586dda72f1/geffnet-1.0.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/32/ba/9ccb80650e5bd61e739f16f33aec3bb290a80f314631be8f7dc0a2b22b5f/glcontext-3.0.0-cp312-cp312-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_17_x86_64.manylinux2014_x86_64.whl
@@ -1109,7 +1109,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/02/10/5da547df7a391dcde17f59520a231527b8571e6f46fc8efb02ccb370ab12/docutils-0.22.4-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/87/62/9773de14fe6c45c23649e98b83231fffd7b9892b6cf863251dc2afa73643/einops-0.8.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/c1/ea/53f2148663b321f21b5a606bd5f191517cf40b7072c0497d3c92c4a13b1e/executing-2.2.1-py2.py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/a4/d2/8fdcb8d7c41cb3e5c6716ccd24ef9b4f600a210f0ff4e28305c6a9cc491f/fastcore-1.11.4-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/32/1b/a4441ae2aeee581cae7f79ccde6307768fd3b5252c84afa6cc44088a7d33/fastcore-1.12.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/e8/2d/d2a548598be01649e2d46231d151a6c56d10b964d94043a335ae56ea2d92/flatbuffers-25.12.19-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/ed/1f/95cb961341bf33e534a472672ef4916c90046dc3c57b1442f5586dda72f1/geffnet-1.0.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/32/ba/9ccb80650e5bd61e739f16f33aec3bb290a80f314631be8f7dc0a2b22b5f/glcontext-3.0.0-cp312-cp312-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_17_x86_64.manylinux2014_x86_64.whl
@@ -2797,10 +2797,10 @@ packages:
   - pkg:pypi/fastapi?source=hash-mapping
   size: 89596
   timestamp: 1765682147034
-- pypi: https://files.pythonhosted.org/packages/a4/d2/8fdcb8d7c41cb3e5c6716ccd24ef9b4f600a210f0ff4e28305c6a9cc491f/fastcore-1.11.4-py3-none-any.whl
+- pypi: https://files.pythonhosted.org/packages/32/1b/a4441ae2aeee581cae7f79ccde6307768fd3b5252c84afa6cc44088a7d33/fastcore-1.12.1-py3-none-any.whl
   name: fastcore
-  version: 1.11.4
-  sha256: eaf673c80a07dc4da3996ab599af501b09425136abdb63c0df8f3172e4939c5b
+  version: 1.12.1
+  sha256: 2c05433802953805a873d589fdabf86e918072bff5c41152e2c34282bd97eadb
   requires_dist:
   - packaging
   - numpy ; extra == 'dev'
@@ -7541,7 +7541,7 @@ packages:
 - pypi: ./
   name: sam3d-body
   version: 0.1.0
-  sha256: 540b895fc0d1a1ffc6e5af2057f6334c2e4f9dbde51e2076af176f95aa4c4fe7
+  sha256: 38801f3ded06a6dd7396002128bdba8af79ce6af4f67561005300777907e92d0
   requires_dist:
   - jaxtyping<0.3.0
   - numpy>=2.0

@@ -83,6 +83,11 @@ python tool/demo_mv_video.py \
     "_download-hocap-sample",
 ], description = "Run multiview video SAM3 segmentation demo with TSDF fusion" }
 
+# Single video segmentation demos
+video-demo = { cmd = "python tool/demo_video.py", description = "Batch video segmentation (loads full video in RAM, best for <4GB videos)" }
+video-chunk-demo = { cmd = "python tool/demo_chunk_video.py", description = "Chunk-based video segmentation (memory-efficient, ~4GB chunks)" }
+video-stream-demo = { cmd = "python tool/demo_stream.py", description = "Streaming video segmentation (constant memory, frame-by-frame)" }
+
 [tool.pixi.feature.cuda129.system-requirements]
 cuda = "12.9"
 

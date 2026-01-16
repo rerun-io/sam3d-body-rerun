@@ -71,6 +71,26 @@ If you just want SAM3 masks without 3D reconstruction:
 pixi run -e dev python tool/gradio_sam3.py
 ```
 
+### Single Video Segmentation
+Process individual videos with SAM3 text-prompted segmentation. Three modes available:
+
+**Batch Mode** (small videos <4GB, best quality):
+```bash
+pixi run video-demo --video-path path/to/video.mp4 --prompt "person"
+```
+
+**Chunk Mode** (large videos, memory-efficient with overlapping chunks):
+```bash
+pixi run video-chunk-demo --video-path path/to/video.mp4 --prompt "person"
+```
+
+**Streaming Mode** (constant memory, frame-by-frame):
+```bash
+pixi run video-stream-demo --video-path path/to/video.mp4 --prompt "person"
+```
+
+Use `--help` with any command to see all options.
+
 ### Multiview Video Demo
 Process multiview HoCap video sequences with SAM3 segmentation and TSDF mesh fusion:
 ```bash
