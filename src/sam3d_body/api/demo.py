@@ -22,7 +22,7 @@ from transformers.models.sam3 import Sam3Model, Sam3Processor
 from yacs.config import CfgNode
 
 from sam3d_body.api.visualization import create_view, set_annotation_context, visualize_sample
-from sam3d_body.build_models import load_sam_3d_body, load_sam_3d_body_hf
+from sam3d_body.build_models import load_sam_3d_body_hf
 from sam3d_body.models.meta_arch import SAM3DBody
 from sam3d_body.sam_3d_body_estimator import FinalPosePrediction, SAM3DBodyEstimator
 
@@ -115,21 +115,13 @@ class SAM3DBodyE2E:
     def __init__(self, config: SAM3DBodyE2EConfig):
         self.sam3_predictor = SAM3Predictor(config.sam3_config)
         self.fov_predictor: BaseRelativePredictor = get_relative_predictor(config.fov_estimator)(device="cuda")
-        device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
-        # load_output: tuple[SAM3DBody, CfgNode] = load_sam_3d_body(
-        #     config.checkpoint_path,
-        #     device=device,
-        #     mhr_path=config.mhr_path,
-        # )
         load_output: tuple[SAM3DBody, CfgNode] = load_sam_3d_body_hf(repo_id="facebook/sam-3d-body-dinov3")
         model: SAM3DBody = load_output[0]
         self.sam3d_body_estimator = SAM3DBodyEstimator(
             sam_3d_body_model=model,
         )
 
-    def predict_single_image(
-        self, rgb_hw3: UInt8[ndarray, "h w 3"]
-    ) -> tuple[list[FinalPosePrediction], RelativeDepthPrediction]:
+    def predict_single_image(self, rgb_hw3: UInt8[ndarray, "h w 3"]) -> tuple[list[FinalPosePrediction], RelativeDepthPrediction]:
         """Estimate 3D poses for a single frame.
 
         Pipeline:
@@ -206,9 +198,7 @@ def main(cfg: Sam3DBodyDemoConfig):
             "*.tiff",
             "*.webp",
         ]
-        images_list: list[str] = sorted(
-            [image for ext in image_extensions for image in glob(os.path.join(cfg.image_folder, ext))]
-        )
+        images_list: list[str] = sorted([image for ext in image_extensions for image in glob(os.path.join(cfg.image_folder, ext))])
     else:
         raise ValueError("Either image_path or image_folder must be specified.")
 
@@ -221,9 +211,7 @@ def main(cfg: Sam3DBodyDemoConfig):
         bgr_hw3: UInt8[ndarray, "h w 3"] = cv2.imread(image_path)
         rgb_hw3: UInt8[ndarray, "h w 3"] = cv2.cvtColor(bgr_hw3, cv2.COLOR_BGR2RGB)
 
-        outputs: tuple[list[FinalPosePrediction], RelativeDepthPrediction] = sam3D_body_e2e.predict_single_image(
-            rgb_hw3
-        )
+        outputs: tuple[list[FinalPosePrediction], RelativeDepthPrediction] = sam3D_body_e2e.predict_single_image(rgb_hw3)
         pred_list: list[FinalPosePrediction] = outputs[0]
         relative_pred: RelativeDepthPrediction = outputs[1]
 
