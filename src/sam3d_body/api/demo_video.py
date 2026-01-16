@@ -1,17 +1,16 @@
 """
-Text-prompt SAM3 video demo with streaming frame processing.
+Text-prompt SAM3 video demo with batch-mode inference.
 
-This module provides a memory-efficient video segmentation pipeline that:
-- Streams frames from disk to minimize RAM usage (no full video buffering).
+This module provides video segmentation using SAM3's propagate_in_video_iterator:
+- Loads entire video into memory for batch processing.
 - Uses SAM3's text-prompt interface for zero-shot object detection and tracking.
 - Logs results to Rerun for interactive visualization.
 
-Uses OpenCV's VideoCapture (backed by FFmpeg) for broad codec support.
+For memory-constrained scenarios with long videos, use demo_stream.py instead.
 """
 
 from __future__ import annotations
 
-from collections.abc import Generator
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
@@ -39,16 +38,82 @@ if TYPE_CHECKING:
 SEG_OVERLAY_ALPHA: int = 242  # ~0.95 opacity (242/255)
 """Alpha value for segmentation mask overlay (0-255). Higher = more opaque."""
 
-SEGMENTATION_DRAW_ORDER: int = 5
-"""Rerun draw order for segmentation layers."""
-
 BOX_DRAW_ORDER: int = 6
 """Rerun draw order for bounding boxes (above segmentation)."""
+
+MAX_VIDEO_MEMORY_GB: float = 4.0
+"""Maximum estimated raw video memory (GB) for batch loading. Larger videos should use demo_stream.py."""
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Video Checks
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+def check_video_constraints(video_path: Path, max_frames: int | None = None) -> None:
+    """
+    Check if video is too large for batch loading based on estimated memory usage.
+
+    Memory is estimated as: frames × width × height × 3 bytes (RGB uint8).
+
+    Args:
+        video_path: Path to the video file.
+        max_frames: Optional cap on frame count (uses this for memory estimate if set).
+
+    Raises:
+        RuntimeError: If video cannot be opened.
+        MemoryError: If estimated video memory exceeds MAX_VIDEO_MEMORY_GB.
+    """
+    cap: cv2.VideoCapture = cv2.VideoCapture(str(video_path))
+    if not cap.isOpened():
+        raise RuntimeError(f"Cannot open video: {video_path}")
+
+    fps: float = cap.get(cv2.CAP_PROP_FPS) or 30.0
+    total_frames: int = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    width: int = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height: int = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    cap.release()
+
+    # Use max_frames if specified
+    effective_frames: int = min(total_frames, max_frames) if max_frames else total_frames
+    duration_seconds: float = total_frames / fps
+
+    # Estimate raw memory: frames × width × height × 3 (RGB uint8)
+    bytes_per_frame: int = width * height * 3
+    estimated_bytes: int = bytes_per_frame * effective_frames
+    estimated_gb: float = estimated_bytes / (1024**3)
+
+    if estimated_gb > MAX_VIDEO_MEMORY_GB:
+        raise MemoryError(
+            f"Video too large for batch loading.\n"
+            f"  Resolution:  {width}x{height}\n"
+            f"  Duration:    {duration_seconds:.1f}s ({effective_frames} frames)\n"
+            f"  Est. memory: {estimated_gb:.1f} GB (max: {MAX_VIDEO_MEMORY_GB:.0f} GB)\n"
+            f"  Suggestion:  Use demo_stream.py for streaming inference (constant memory),\n"
+            f"               or use --max-frames to limit frames loaded."
+        )
+
+    print(f"[Video check] {width}x{height}, {duration_seconds:.1f}s, {effective_frames} frames (~{estimated_gb:.1f} GB) ✓")
 
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Configuration Dataclasses
 # ──────────────────────────────────────────────────────────────────────────────
+
+DTYPE_MAP: dict[str, torch.dtype] = {
+    "bfloat16": torch.bfloat16,
+    "float16": torch.float16,
+    "float32": torch.float32,
+}
+"""Mapping from string dtype names to torch.dtype."""
+
+
+def safe_dtype(dtype_pref: str, device: torch.device) -> torch.dtype:
+    """Return dtype, falling back to float32 on CPU for half-precision types."""
+    dtype: torch.dtype = DTYPE_MAP[dtype_pref]
+    if device.type == "cpu" and dtype in (torch.float16, torch.bfloat16):
+        return torch.float32
+    return dtype
 
 
 @dataclass(slots=True)
@@ -56,7 +121,7 @@ class Sam3VideoModelConfig:
     """
     Checkpoint, device, and dtype settings for the SAM3 video model.
 
-    Controls compute placement and detection thresholds for streaming inference.
+    Controls compute placement and detection thresholds for batch inference.
     """
 
     checkpoint: str = "facebook/sam3"
@@ -82,89 +147,27 @@ class Sam3VideoModelConfig:
 
 
 @dataclass(slots=True)
-class Sam3StreamDemoConfig:
+class Sam3VideoDemoConfig:
     """
-    CLI options for running text-prompt SAM3 video segmentation in streaming mode.
+    CLI options for running text-prompt SAM3 video segmentation with batch inference.
 
     This is the top-level configuration passed to ``main()``.
     """
 
     video_path: Path = Path()
-    """Path to the input video file (any format supported by OpenCV or FFmpeg)."""
+    """Path to the input video file (any format supported by transformers ``load_video``)."""
 
     prompt: str = "person"
     """Text concept to detect and track across the video."""
 
     max_frames: int | None = None
-    """Optional cap on the number of frames to decode and propagate."""
+    """Optional cap on the number of frames to load and propagate."""
 
     rr_config: RerunTyroConfig = field(default_factory=RerunTyroConfig)
     """Viewer/runtime options for Rerun (window layout, recording, etc.)."""
 
     model_config: Sam3VideoModelConfig = field(default_factory=Sam3VideoModelConfig)
     """Checkpoint, device, and dtype settings for the SAM3 video model."""
-
-
-
-DTYPE_MAP: dict[str, torch.dtype] = {
-    "bfloat16": torch.bfloat16,
-    "float16": torch.float16,
-    "float32": torch.float32,
-}
-"""Mapping from string dtype names to torch.dtype."""
-
-
-def safe_dtype(dtype_pref: str, device: torch.device) -> torch.dtype:
-    """Return dtype, falling back to float32 on CPU for half-precision types."""
-    dtype: torch.dtype = DTYPE_MAP[dtype_pref]
-    if device.type == "cpu" and dtype in (torch.float16, torch.bfloat16):
-        return torch.float32
-    return dtype
-
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Video Frame Iteration (Streaming)
-# ──────────────────────────────────────────────────────────────────────────────
-
-FrameData = tuple[int, UInt8[ndarray, "h w 3"], float | None, int, int]
-"""Type alias for frame iteration: (frame_idx, rgb_array, fps, width, height)."""
-
-
-def iter_video_frames(path: Path) -> Generator[FrameData, None, None]:
-    """
-    Yield RGB frames from a video file, streaming from disk.
-
-    Uses OpenCV's VideoCapture which leverages FFmpeg for broad codec support
-    including H.264, H.265, AV1, VP9, etc.
-
-    Args:
-        path: Path to the video file.
-
-    Yields:
-        Tuple of (frame_idx, rgb_array, fps, width, height) for each frame.
-
-    Raises:
-        RuntimeError: If the video cannot be opened.
-    """
-    cap: cv2.VideoCapture = cv2.VideoCapture(str(path))
-    if not cap.isOpened():
-        raise RuntimeError(f"Failed to open video: {path}")
-
-    fps: float | None = float(cap.get(cv2.CAP_PROP_FPS)) or None
-    width: int = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    height: int = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-
-    try:
-        frame_idx: int = 0
-        ok, frame_bgr = cap.read()
-        while ok:
-            frame_rgb: UInt8[ndarray, "h w 3"] = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
-            yield frame_idx, frame_rgb, fps, width, height
-            frame_idx += 1
-            ok, frame_bgr = cap.read()
-    finally:
-        cap.release()
-
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -360,22 +363,23 @@ def load_sam3_model(
 # ──────────────────────────────────────────────────────────────────────────────
 
 
-def main(cfg: Sam3StreamDemoConfig) -> None:
+def main(cfg: Sam3VideoDemoConfig) -> None:
     """
-    Run text-prompt SAM3 video segmentation using streaming inference.
+    Run text-prompt SAM3 video segmentation using batch inference.
 
     This function:
-    1. Loads the SAM3 model and initializes an inference session.
-    2. Streams video frames from disk (constant memory usage).
-    3. Runs detection + tracking on each frame using the text prompt.
+    1. Loads the SAM3 model and the entire video into memory.
+    2. Initializes an inference session with the video tensor.
+    3. Propagates masks through the video using text prompts.
     4. Logs results to Rerun for visualization.
+
+    For long videos, consider using demo_stream.py which has constant memory usage.
 
     Args:
         cfg: Full configuration including video path, prompt, and model settings.
 
     Raises:
         FileNotFoundError: If the video file does not exist.
-        RuntimeError: If the video contains no frames.
     """
     if not cfg.video_path.exists():
         raise FileNotFoundError(f"Video not found: {cfg.video_path}")
@@ -387,52 +391,53 @@ def main(cfg: Sam3StreamDemoConfig) -> None:
     # Load model and processor
     model, processor = load_sam3_model(cfg.model_config, device, dtype)
 
-    # Initialize frame iterator
-    frame_iter: Generator[FrameData, None, None] = iter_video_frames(cfg.video_path)
+    # Load video frames into memory
+    from transformers.video_utils import load_video
 
-    try:
-        # Get first frame to validate video
-        first: FrameData | None = next(frame_iter, None)
-        if first is None:
-            raise RuntimeError(f"Video contains no frames: {cfg.video_path}")
+    # Check video constraints (duration + resolution)
+    check_video_constraints(cfg.video_path, cfg.max_frames)
 
-        first_idx, first_frame, fps, width, height = first
+    video_frames_np, video_metadata = load_video(
+        str(cfg.video_path),
+        num_frames=cfg.max_frames,
+    )
+    video_frames: UInt8[ndarray, "t h w 3"] = video_frames_np  # type: ignore[assignment]
+    total_frames: int = video_frames.shape[0]
 
-        # Initialize inference session
-        inference_session: Sam3VideoInferenceSession = processor.init_video_session(
-            video=None,
-            inference_device=device,
-            processing_device=cfg.model_config.processing_device,
-            video_storage_device=cfg.model_config.video_storage_device,
-            dtype=dtype,
-        )
-        processor.add_text_prompt(inference_session=inference_session, text=cfg.prompt)
+    # Initialize inference session with full video
+    inference_session: Sam3VideoInferenceSession = processor.init_video_session(
+        video=video_frames,
+        inference_device=device,
+        processing_device=cfg.model_config.processing_device,
+        video_storage_device=cfg.model_config.video_storage_device,
+        dtype=dtype,
+    )
+    processor.add_text_prompt(inference_session=inference_session, text=cfg.prompt)
 
-        # Setup Rerun visualization
-        rr.send_blueprint(build_blueprint())
-        log_annotation_context()
+    # Setup Rerun visualization
+    rr.send_blueprint(build_blueprint())
+    log_annotation_context()
 
-        # Log video asset once (much more efficient than per-frame images)
-        frame_timestamps_ns: Int[ndarray, "num_frames"] = log_video(
-            video_path=cfg.video_path,
-            video_log_path=Path("video/raw"),
-            timeline="video_time",
-        )
+    # Log video asset once (much more efficient than per-frame images)
+    frame_timestamps_ns: Int[ndarray, "num_frames"] = log_video(
+        video_path=cfg.video_path,
+        video_log_path=Path("video/raw"),
+        timeline="video_time",
+    )
 
-        # Frame processing function
-        def process_frame(frame_idx: int, frame_rgb: UInt8[ndarray, "h w 3"]) -> None:
-            """Process a single frame through the model and log to Rerun."""
-            inputs = processor(images=frame_rgb, device=device, return_tensors="pt")
-            model_outputs = model(
+    # Run batch inference using propagate_in_video_iterator
+    with torch.inference_mode():
+        for model_outputs in tqdm(
+            model.propagate_in_video_iterator(
                 inference_session=inference_session,
-                frame=inputs.pixel_values[0],
-                reverse=False,
-            )
-            processed_outputs = processor.postprocess_outputs(
-                inference_session,
-                model_outputs,
-                original_sizes=inputs.original_sizes,
-            )
+                max_frame_num_to_track=cfg.max_frames,
+            ),
+            total=total_frames,
+            desc="Propagating masks",
+        ):
+            frame_idx: int = int(model_outputs.frame_idx)
+            frame_rgb: UInt8[ndarray, "h w 3"] = video_frames[frame_idx]
+            processed_outputs = processor.postprocess_outputs(inference_session, model_outputs)
             log_frame_outputs(
                 frame_idx,
                 frame_timestamps_ns,
@@ -440,34 +445,10 @@ def main(cfg: Sam3StreamDemoConfig) -> None:
                 frame_shape=(frame_rgb.shape[0], frame_rgb.shape[1]),
             )
 
-        # Run streaming inference
-        total_frames: int = 0
-        with torch.inference_mode():
-            progress_total: int | None = cfg.max_frames
-            pbar: tqdm = tqdm(total=progress_total, desc="Streaming masks")
-
-            # Process first frame
-            process_frame(first_idx, first_frame)
-            pbar.update(1)
-            total_frames += 1
-
-            # Process remaining frames
-            for frame_idx, frame_rgb, *_ in frame_iter:
-                if cfg.max_frames is not None and frame_idx >= cfg.max_frames:
-                    break
-                process_frame(frame_idx, frame_rgb)
-                pbar.update(1)
-                total_frames += 1
-
-            pbar.close()
-
-        # Summary
-        fps_msg: str = f" @ {fps:.2f} fps" if fps else ""
-        print(f"[done] Stream-processed {total_frames} frames{fps_msg} (prompt='{cfg.prompt}').")
-
-    finally:
-        if hasattr(frame_iter, "close"):
-            frame_iter.close()
+    # Summary
+    fps: float | None = getattr(video_metadata, "fps", None)
+    fps_msg: str = f" @ {fps:.2f} fps" if fps is not None else ""
+    print(f"[done] Processed {total_frames} frames{fps_msg} (prompt='{cfg.prompt}').")
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -476,6 +457,6 @@ def main(cfg: Sam3StreamDemoConfig) -> None:
 
 __all__: list[str] = [
     "Sam3VideoModelConfig",
-    "Sam3StreamDemoConfig",
+    "Sam3VideoDemoConfig",
     "main",
 ]
