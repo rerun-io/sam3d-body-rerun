@@ -85,10 +85,23 @@ python tool/demo_mv_video.py \
     "_download-hocap-sample",
 ], description = "Run multiview video SAM3 segmentation demo with TSDF fusion" }
 
+# Run multiview body mesh fitting demo with sample data
+mv-body-demo = { cmd = """
+python tool/demo_mv_body.py \
+    --max-frames 50 \
+    hocap \
+    --root-directory data/sample \
+    --subject-id 8 \
+    --sequence-name 20231024_180733
+""", depends-on = [
+    "_download-hocap-sample",
+], description = "Multiview 3D body mesh fitting with per-camera estimation" }
+
 # Single video segmentation demos
 video-demo = { cmd = "python tool/demo_video.py", description = "Batch video segmentation (loads full video in RAM, best for <4GB videos)" }
 video-chunk-demo = { cmd = "python tool/demo_chunk_video.py", description = "Chunk-based video segmentation (memory-efficient, ~4GB chunks)" }
 video-stream-demo = { cmd = "python tool/demo_stream.py", description = "Streaming video segmentation (constant memory, frame-by-frame)" }
+
 
 [tool.pixi.feature.cuda129.system-requirements]
 cuda = "12.9"
@@ -153,6 +166,7 @@ pydub = "*"
 open3d = ">=0.19.0,<0.20"
 h5py = ">=3.11"
 py-opencv = ">=4.10.0"
+torchcodec = "*"
 
 [tool.ruff]
 line-length = 150
