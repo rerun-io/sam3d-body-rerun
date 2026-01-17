@@ -102,6 +102,31 @@ Downloads sample data (~1.7GB) on first run and processes 100 frames across 8 ca
   <img src="media/mv-video-demo.gif" alt="multiview video demo" width="720" />
 </p>
 
+### Multiview Body Optimization (NEW)
+Fuse per-view body predictions into a single globally-consistent 3D mesh using differentiable MHR forward kinematics:
+
+```bash
+# HoCap dataset
+pixi run -e dev python tool/demo_mv_body.py hocap --root-directory data/sample
+
+# RRD file (from ExoEgo pipeline)
+pixi run -e dev python tool/demo_mv_body.py rrd --rrd-path path/to/episode.rrd
+```
+
+**What it does:**
+1. Runs SAM3 + SAM3DBody on each camera view independently
+2. Triangulates 2D keypoints across views for 3D supervision
+3. Optimizes MHR pose parameters via L1 multiview reprojection loss
+4. Validates alignment: MHR mesh vs triangulated keypoints
+
+**Performance (4 cameras, 50 frames):**
+| Metric | Value |
+|--------|-------|
+| MHR World Error | 5.0px (matches triangulated) |
+| 3D Alignment | 0.01m (~1cm) |
+| Timing | 81% inference, 19% optimization |
+| Throughput | 0.4 FPS end-to-end |
+
 ## Acknowledgements
 Thanks to the original projects that make this demo possible:
 
