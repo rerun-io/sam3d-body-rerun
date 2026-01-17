@@ -84,7 +84,7 @@ class _Sam3ImagePredictor:
         device: torch.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         dtype_map: dict[str, torch.dtype] = {"float16": torch.float16, "bfloat16": torch.bfloat16, "float32": torch.float32}
         dtype: torch.dtype = dtype_map[cfg.dtype] if device.type == "cuda" else torch.float32
-        self._inference_device: torch.device = device
+        self._inference_device: torch.device = device  # type: ignore[read-only]  # pyrefly false positive
         self.model = Sam3Model.from_pretrained(cfg.checkpoint).to(device=device, dtype=dtype)
         self.processor = Sam3Processor.from_pretrained(cfg.checkpoint)
 
@@ -106,7 +106,7 @@ class _Sam3ImagePredictor:
         Returns:
             Dictionary with 'masks', 'boxes', 'scores' keys.
         """
-        inputs = self.processor(images=rgb_hw3, text=text, return_tensors="pt")
+        inputs = self.processor(images=rgb_hw3, text=text, return_tensors="pt")  # type: ignore[misc]  # transformers stub issue
         inputs = {k: v.to(self._inference_device) for k, v in inputs.items()}
         if "pixel_values" in inputs:
             inputs["pixel_values"] = inputs["pixel_values"].to(dtype=self.model.dtype)
@@ -214,6 +214,8 @@ def _log_cameras(exoego_sequence: BaseExoEgoSequence) -> None:
     """
     if exoego_sequence.exo_sequence is not None:
         for cam in exoego_sequence.exo_sequence.exo_cam_list:
+            if cam is None:
+                continue
             cam_log_path: Path = Path("/world") / "exo" / cam.name
             log_pinhole(
                 cam,
@@ -397,10 +399,10 @@ def main(cfg: Sam3MVImageDemoConfig) -> None:
     rr.log("text-prompt", rr.TextDocument(f"## Prompt\n\n{cfg.prompt}", media_type="text/markdown"), static=True)
 
     exo_cam_names: list[str] = (
-        [cam.name for cam in sequence.exo_sequence.exo_cam_list] if sequence.exo_sequence else []
+        [cam.name for cam in sequence.exo_sequence.exo_cam_list if cam is not None] if sequence.exo_sequence else []
     )
     exo_depth_list: list[UInt16[ndarray, "h w"]] | None = sample.exo_depth_list
-    exo_cam_param_list: list[Fisheye62Parameters | PinholeParameters] | None = sample.exo_cam_params_list
+    exo_cam_param_list: list[Fisheye62Parameters | PinholeParameters | None] | None = sample.exo_cam_params_list
     assert exo_depth_list is not None, "Exo depth images are required for this demo."
     assert exo_cam_param_list is not None, "Exo camera parameters are required for this demo."
 
@@ -413,6 +415,8 @@ def main(cfg: Sam3MVImageDemoConfig) -> None:
 
     if sample.exo_bgr_list is not None and sequence.exo_sequence is not None:
         for idx, (bgr, cam_params) in enumerate(zip(sample.exo_bgr_list, exo_cam_param_list, strict=True)):
+            if cam_params is None:
+                continue
             frame_bgr: UInt8[ndarray, "h w 3"] = bgr
             frame_rgb: UInt8[ndarray, "h w 3"] = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
 

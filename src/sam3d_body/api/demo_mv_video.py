@@ -180,6 +180,8 @@ def _log_cameras(exoego_sequence: BaseExoEgoSequence) -> None:
     """
     if exoego_sequence.exo_sequence is not None:
         for cam in exoego_sequence.exo_sequence.exo_cam_list:
+            if cam is None:
+                continue
             cam_log_path: Path = Path("/world") / "exo" / cam.name
             log_pinhole(
                 cam,
@@ -377,7 +379,7 @@ def main(cfg: Sam3MVVideoDemoConfig) -> None:
 
     parent_log_path: Path = Path("world")
     exo_cam_names: list[str] = (
-        [cam.name for cam in sequence.exo_sequence.exo_cam_list] if sequence.exo_sequence else []
+        [cam.name for cam in sequence.exo_sequence.exo_cam_list if cam is not None] if sequence.exo_sequence else []
     )
 
     # Log static data
@@ -408,11 +410,13 @@ def main(cfg: Sam3MVVideoDemoConfig) -> None:
             for cam_idx, (bgr, cam_params) in enumerate(
                 zip(sample.exo_bgr_list, exo_cam_param_list, strict=True)
             ):
+                if cam_params is None:
+                    continue
                 frame_bgr: UInt8[ndarray, "h w 3"] = bgr
                 frame_rgb: UInt8[ndarray, "h w 3"] = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
 
                 # Run inference through the shared session
-                inputs = processor(images=frame_rgb, device=device, return_tensors="pt")
+                inputs = processor(images=frame_rgb, device=device, return_tensors="pt")  # type: ignore[misc]  # transformers stub issue
                 model_outputs = model(
                     inference_session=inference_session,
                     frame=inputs.pixel_values[0],
