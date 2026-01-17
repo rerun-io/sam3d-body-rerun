@@ -1,4 +1,19 @@
-"""Text-prompt SAM3 multiview image demo for HoCap/ExoEgo datasets."""
+"""
+Text-prompt SAM3 multiview image demo for HoCap/ExoEgo datasets.
+
+This module provides multiview image segmentation on the first frame:
+- Loads a single multiview sample from an ExoEgo sequence.
+- Runs SAM3 instance segmentation on each exocentric camera.
+- Fuses depth from all cameras into a TSDF volume for 3D mesh reconstruction.
+- Logs results to Rerun for interactive visualization.
+
+Usage:
+    pixi run python tool/demo_mv_image.py --dataset.exocap.sequence_name <name> --prompt "person"
+
+See Also:
+    - demo_mv_video.py: Multiview video (temporal) demo
+    - demo.py: Single-image 3D pose estimation demo
+"""
 
 from __future__ import annotations
 
@@ -22,7 +37,10 @@ from simplecv.rerun_log_utils import RerunTyroConfig, log_pinhole
 from transformers import Sam3Model, Sam3Processor
 
 from sam3d_body.api.visualization import BOX_PALETTE, SEG_OVERLAY_ALPHA
-"""Alpha value for segmentation mask overlay (0-255). Higher = more opaque."""
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Configuration Dataclasses
+# ──────────────────────────────────────────────────────────────────────────────
 
 
 @dataclass(slots=True)
@@ -52,37 +70,21 @@ class Sam3MVImageDemoConfig:
     model_config: Sam3MVImageModelConfig = field(default_factory=Sam3MVImageModelConfig)
     """Checkpoint, device, and dtype settings for the SAM3 model."""
 
-
-def _resolve_device(device_pref: Literal["auto", "cpu", "cuda"]) -> torch.device:
-    """Pick a torch device respecting user preference."""
-    if device_pref == "cuda":
-        return torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    if device_pref == "auto":
-        return torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    return torch.device(device_pref)
-
-
-def _resolve_dtype(dtype_pref: Literal["float16", "bfloat16", "float32"], device: torch.device) -> torch.dtype:
-    """Choose a safe dtype; fall back to float32 on CPU for fp16/bf16."""
-    mapping: dict[str, torch.dtype] = {
-        "float16": torch.float16,
-        "bfloat16": torch.bfloat16,
-        "float32": torch.float32,
-    }
-    dtype: torch.dtype = mapping[dtype_pref]
-    if device.type == "cpu" and dtype in (torch.float16, torch.bfloat16):
-        return torch.float32
-    return dtype
+# ──────────────────────────────────────────────────────────────────────────────
+# SAM3 Image Predictor
+# ──────────────────────────────────────────────────────────────────────────────
 
 
 class _Sam3ImagePredictor:
     """Lightweight wrapper around the SAM3 model for single-image inference."""
 
-    def __init__(self, cfg: Sam3MVImageModelConfig):
-        self.cfg = cfg
-        device: torch.device = _resolve_device(cfg.device)
-        dtype: torch.dtype = _resolve_dtype(cfg.dtype, device)
-        self.device: torch.device = device
+    def __init__(self, cfg: Sam3MVImageModelConfig) -> None:
+        """Initialize the predictor with model and processor."""
+        self.cfg: Sam3MVImageModelConfig = cfg
+        device: torch.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        dtype_map: dict[str, torch.dtype] = {"float16": torch.float16, "bfloat16": torch.bfloat16, "float32": torch.float32}
+        dtype: torch.dtype = dtype_map[cfg.dtype] if device.type == "cuda" else torch.float32
+        self._inference_device: torch.device = device
         self.model = Sam3Model.from_pretrained(cfg.checkpoint).to(device=device, dtype=dtype)
         self.processor = Sam3Processor.from_pretrained(cfg.checkpoint)
 
@@ -93,30 +95,55 @@ class _Sam3ImagePredictor:
         text: str,
         score_threshold: float,
     ) -> dict:
-        """Run SAM3 instance segmentation on one RGB image."""
+        """
+        Run SAM3 instance segmentation on one RGB image.
+
+        Args:
+            rgb_hw3: Input RGB image (H, W, 3).
+            text: Text prompt for the segmentation target.
+            score_threshold: Minimum confidence to keep an instance.
+
+        Returns:
+            Dictionary with 'masks', 'boxes', 'scores' keys.
+        """
         inputs = self.processor(images=rgb_hw3, text=text, return_tensors="pt")
-        inputs = {k: v.to(self.device) for k, v in inputs.items()}
+        inputs = {k: v.to(self._inference_device) for k, v in inputs.items()}
         if "pixel_values" in inputs:
             inputs["pixel_values"] = inputs["pixel_values"].to(dtype=self.model.dtype)
 
         with torch.no_grad():
             outputs = self.model(**inputs)
 
+        original_sizes = inputs.get("original_sizes")
+        target_sizes = original_sizes.tolist() if original_sizes is not None else None  # type: ignore[union-attr]
         processed = self.processor.post_process_instance_segmentation(
             outputs,
             threshold=score_threshold,
             mask_threshold=0.5,
-            target_sizes=inputs.get("original_sizes").tolist(),
+            target_sizes=target_sizes,
         )[0]
         return processed
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+# Rerun Visualization Helpers
+# ──────────────────────────────────────────────────────────────────────────────
+
+
 def _make_blueprint(exo_cam_names: list[str], max_exo_views: Literal[4, 8] = 8) -> rrb.Blueprint:
-    """Create a viewer layout with per-camera 2D views, stacked horizontally."""
+    """
+    Create a viewer layout with per-camera 2D views, stacked horizontally.
+
+    Args:
+        exo_cam_names: List of exocentric camera names.
+        max_exo_views: Maximum number of camera views to show.
+
+    Returns:
+        Blueprint configured to show 3D view, text prompt, and camera tabs.
+    """
     main_view: rrb.ContainerLike = rrb.Spatial3DView(
         origin="/",
         name="3D View",
-        spatial_information=rrb.SpatialInformation(show_axes=True),
         eye_controls=rrb.EyeControls3D(
             kind="Orbital", position=[0.0, 1.5, 1.5], look_target=[0, 0, 0.3], spin_speed=0.5
         ),
@@ -125,7 +152,7 @@ def _make_blueprint(exo_cam_names: list[str], max_exo_views: Literal[4, 8] = 8) 
     if exo_cam_names:
         exo_tabs_row: list[rrb.ContainerLike] = []
         for name in exo_cam_names[:max_exo_views]:
-            origin_base = f"/world/exo/{name}/pinhole"
+            origin_base: str = f"/world/exo/{name}/pinhole"
             exo_tabs_row.append(
                 rrb.Tabs(
                     contents=[
@@ -142,24 +169,24 @@ def _make_blueprint(exo_cam_names: list[str], max_exo_views: Literal[4, 8] = 8) 
                 )
             )
 
-        prompt_view = rrb.TextDocumentView()
-        exo_view = rrb.Horizontal(contents=exo_tabs_row)
+        prompt_view: rrb.ContainerLike = rrb.TextDocumentView()
+        exo_view: rrb.ContainerLike = rrb.Horizontal(contents=exo_tabs_row)
         main_view = rrb.Horizontal(contents=[prompt_view, main_view], column_shares=[1, 10])
         main_view = rrb.Vertical(contents=[main_view, exo_view], row_shares=[4, 1])
 
-    container: rrb.ContainerLike = main_view
-    blueprint = rrb.Blueprint(
-        rrb.Horizontal(
-            contents=[container],
-            column_shares=[4, 1],
-        ),
+    return rrb.Blueprint(
+        rrb.Horizontal(contents=[main_view], column_shares=[4, 1]),
         collapse_panels=True,
     )
-    return blueprint
 
 
 def _log_annotation_context() -> None:
-    """Register a simple background + instance palette for masks/boxes."""
+    """
+    Register annotation context with background + instance color palette.
+
+    This sets up class IDs for segmentation masks and bounding boxes,
+    using colors from ``BOX_PALETTE`` with ``SEG_OVERLAY_ALPHA`` opacity.
+    """
     class_descriptions: list[rr.ClassDescription] = [
         rr.ClassDescription(info=rr.AnnotationInfo(id=0, label="Background", color=(64, 64, 64, 0)))
     ]
@@ -173,24 +200,32 @@ def _log_annotation_context() -> None:
             SEG_OVERLAY_ALPHA,
         )
         class_descriptions.append(
-            rr.ClassDescription(
-                info=rr.AnnotationInfo(id=idx, label=f"Object-{idx}", color=color_rgba)
-            )
+            rr.ClassDescription(info=rr.AnnotationInfo(id=idx, label=f"Object-{idx}", color=color_rgba))
         )
     rr.log("/", rr.AnnotationContext(class_descriptions), static=True)
 
 
 def _log_cameras(exoego_sequence: BaseExoEgoSequence) -> None:
-    """Log camera intrinsics/extrinsics following the schema."""
+    """
+    Log camera intrinsics/extrinsics following the schema.
+
+    Args:
+        exoego_sequence: The ExoEgo sequence containing camera metadata.
+    """
     if exoego_sequence.exo_sequence is not None:
         for cam in exoego_sequence.exo_sequence.exo_cam_list:
-            cam_log_path = Path("/world") / "exo" / cam.name
+            cam_log_path: Path = Path("/world") / "exo" / cam.name
             log_pinhole(
                 cam,
                 cam_log_path=cam_log_path,
                 image_plane_distance=exoego_sequence.exo_sequence.image_plane_distance,
                 static=True,
             )
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Segmentation Processing
+# ──────────────────────────────────────────────────────────────────────────────
 
 
 def _prepare_segmentation_assets(
@@ -201,11 +236,22 @@ def _prepare_segmentation_assets(
     Float32[ndarray, "n 4"] | None,
     Float32[ndarray, "n"] | None,
 ]:
-    """Convert SAM3 outputs into segmentation IDs and boxes."""
+    """
+    Convert SAM3 outputs into segmentation IDs and boxes.
+
+    Args:
+        frame_rgb: Input RGB image for shape reference.
+        results: Dictionary from predictor.predict() with masks/boxes/scores.
+
+    Returns:
+        Tuple of (seg_map, boxes, scores) where seg_map contains class IDs,
+        boxes are in XYXY format, and scores are detection confidences.
+    """
     raw_masks = results.get("masks")
     raw_boxes = results.get("boxes")
     raw_scores = results.get("scores")
 
+    # Convert tensors to numpy if needed
     if raw_masks is not None and hasattr(raw_masks, "detach"):
         raw_masks = raw_masks.detach().cpu().numpy()
     if raw_boxes is not None and hasattr(raw_boxes, "detach"):
@@ -216,11 +262,7 @@ def _prepare_segmentation_assets(
     if raw_masks is None or len(raw_masks) == 0:
         h: int = int(frame_rgb.shape[0])
         w: int = int(frame_rgb.shape[1])
-        return (
-            np.zeros((h, w), dtype=np.uint16),
-            None,
-            None,
-        )
+        return (np.zeros((h, w), dtype=np.uint16), None, None)
 
     masks_np: Float32[ndarray, "n h w"] = np.asarray(raw_masks, dtype=np.float32)
     if masks_np.ndim == 2:
@@ -229,7 +271,6 @@ def _prepare_segmentation_assets(
     h = int(frame_rgb.shape[0])
     w = int(frame_rgb.shape[1])
     seg_map: UInt16[ndarray, "h w"] = np.zeros((h, w), dtype=np.uint16)
-
     num_instances: int = int(masks_np.shape[0])
 
     for idx in range(num_instances):
@@ -254,7 +295,16 @@ def _colorize_segmentation(
     seg_map: UInt16[ndarray, "h w"],
     base_rgb: UInt8[ndarray, "h w 3"],
 ) -> UInt8[ndarray, "h w 3"]:
-    """Recolor the RGB image using segmentation IDs, keeping background texture."""
+    """
+    Recolor the RGB image using segmentation IDs for TSDF fusion.
+
+    Args:
+        seg_map: Segmentation map with class IDs (0 = background).
+        base_rgb: Original RGB image.
+
+    Returns:
+        RGB image with segmented regions recolored using palette colors.
+    """
     fusion_rgb: UInt8[ndarray, "h w 3"] = np.asarray(base_rgb, copy=True)
     unique_ids = np.unique(seg_map)
     for class_id in unique_ids:
@@ -274,7 +324,16 @@ def _log_camera_outputs(
     boxes: Float32[ndarray, "n 4"] | None,
     scores: Float32[ndarray, "n"] | None,
 ) -> None:
-    """Log per-camera image, segmentation, and boxes."""
+    """
+    Log per-camera image, segmentation, and boxes to Rerun.
+
+    Args:
+        pinhole_path: Entity path for the camera's pinhole transform.
+        frame_bgr: BGR image from OpenCV.
+        seg_map: Segmentation map with class IDs.
+        boxes: Optional bounding boxes in XYXY format.
+        scores: Optional detection scores.
+    """
     rr.set_time("frame_idx", sequence=0)
     rr.log(f"{pinhole_path}/image", rr.Image(frame_bgr, color_model=rr.ColorModel.BGR).compress(jpeg_quality=85))
     rr.log(f"{pinhole_path}/segmentation_ids", rr.SegmentationImage(seg_map))
@@ -304,8 +363,27 @@ def _log_camera_outputs(
     )
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+# Main Entry Point
+# ──────────────────────────────────────────────────────────────────────────────
+
+
 def main(cfg: Sam3MVImageDemoConfig) -> None:
-    """Run text-prompt SAM3 segmentation on the first multiview frame."""
+    """
+    Run text-prompt SAM3 segmentation on the first multiview frame.
+
+    This function:
+    1. Loads the first frame from the ExoEgo dataset.
+    2. Runs SAM3 instance segmentation on each exo camera.
+    3. Fuses depth into a TSDF volume and logs visualizations to Rerun.
+
+    Args:
+        cfg: Demo configuration with dataset, prompt, and model settings.
+
+    Raises:
+        RuntimeError: If dataset yields zero frames.
+        AssertionError: If depth or camera parameters are missing.
+    """
     sequence: BaseExoEgoSequence = cfg.dataset.setup()
 
     if len(sequence) == 0:
@@ -318,11 +396,15 @@ def main(cfg: Sam3MVImageDemoConfig) -> None:
 
     rr.log("text-prompt", rr.TextDocument(f"## Prompt\n\n{cfg.prompt}", media_type="text/markdown"), static=True)
 
-    exo_cam_names: list[str] = [cam.name for cam in sequence.exo_sequence.exo_cam_list] if sequence.exo_sequence else []
+    exo_cam_names: list[str] = (
+        [cam.name for cam in sequence.exo_sequence.exo_cam_list] if sequence.exo_sequence else []
+    )
     exo_depth_list: list[UInt16[ndarray, "h w"]] | None = sample.exo_depth_list
     exo_cam_param_list: list[Fisheye62Parameters | PinholeParameters] | None = sample.exo_cam_params_list
     assert exo_depth_list is not None, "Exo depth images are required for this demo."
     assert exo_cam_param_list is not None, "Exo camera parameters are required for this demo."
+
+    # Log static data
     rr.send_blueprint(_make_blueprint(exo_cam_names))
     rr.log("/", sequence.world_coordinate_system, static=True)
     _log_annotation_context()
@@ -333,10 +415,12 @@ def main(cfg: Sam3MVImageDemoConfig) -> None:
         for idx, (bgr, cam_params) in enumerate(zip(sample.exo_bgr_list, exo_cam_param_list, strict=True)):
             frame_bgr: UInt8[ndarray, "h w 3"] = bgr
             frame_rgb: UInt8[ndarray, "h w 3"] = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
+
             outputs = predictor.predict(frame_rgb, text=cfg.prompt, score_threshold=cfg.score_threshold)
             seg_map, boxes, scores = _prepare_segmentation_assets(frame_rgb, outputs)
             fusion_rgb: UInt8[ndarray, "h w 3"] = _colorize_segmentation(seg_map, frame_rgb)
             pinhole_path: Path = parent_log_path / "exo" / cam_params.name / "pinhole"
+
             _log_camera_outputs(
                 pinhole_path=str(pinhole_path),
                 frame_bgr=frame_bgr,
@@ -344,6 +428,7 @@ def main(cfg: Sam3MVImageDemoConfig) -> None:
                 boxes=boxes,
                 scores=scores,
             )
+
             K_33: Float32[ndarray, "3 3"] | None = cam_params.intrinsics.k_matrix
             assert K_33 is not None, "Pinhole camera intrinsics are required for depth fusion."
             fuser.fuse_frames(
@@ -352,13 +437,13 @@ def main(cfg: Sam3MVImageDemoConfig) -> None:
                 cam_T_world_44=cam_params.extrinsics.cam_T_world,
                 rgb_hw3=fusion_rgb,
             )
-            # rr.log(f"{pinhole_path}/depth", rr.DepthImage(exo_depth_list[idx], meter=1000.0))
+
+        # Extract and log the mesh
         gt_mesh: o3d.geometry.TriangleMesh = fuser.get_mesh()
         gt_mesh.compute_vertex_normals()
 
         vertex_positions: Float32[ndarray, "num_vertices 3"] = np.asarray(gt_mesh.vertices, dtype=np.float32)
         triangle_indices: Int[ndarray, "num_faces 3"] = np.asarray(gt_mesh.triangles, dtype=np.int32)
-
         vertex_normals: Float32[ndarray, "num_vertices 3"] = np.asarray(gt_mesh.vertex_normals, dtype=np.float32)
         vertex_colors: Float32[ndarray, "num_vertices 3"] = np.asarray(gt_mesh.vertex_colors, dtype=np.float32)
 

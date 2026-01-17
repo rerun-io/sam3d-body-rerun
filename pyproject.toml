@@ -46,16 +46,18 @@ no-build-isolation = ["detectron2", "moge"]
 iopath = ">=0.1.10"
 gradio = ">=6.0.0,<7"
 rerun-sdk = ">=0.28.1"
+fsspec = ">=2025.3"
 
 [tool.pixi.pypi-dependencies]
 sam3d_body = { path = ".", editable = true }
 moge = { git = "https://github.com/microsoft/MoGe.git" }
-simplecv = { git = "https://github.com/pablovela5620/simplecv.git", rev = "58ef2eb56d99e395ef6422c04f2b0f4ca5a53734" }
+simplecv = { git = "https://github.com/pablovela5620/simplecv.git", rev = "804e95c588b4af5be50874288eb8929ef2450f74" }
 timm = ">=0.9"
 transformers = ">=5.0.0rc2"
 monopriors = { git = "https://github.com/pablovela5620/monoprior.git" }
 natsort = ">=8.4"
 datasets = ">=2.20"
+fsspec = ">=2025.3"
 
 [tool.pixi.tasks]
 app = "python tool/gradio_sam3d_body.py"
@@ -128,7 +130,7 @@ kernels = ">=0.11.3"
 
 [tool.pixi.feature.dev.dependencies]
 beartype = "*"
-pyrefly = ">=0.42.2,<0.43"
+pyrefly = ">=0.47.0"
 ruff = ">=0.14.5,<0.15"
 
 [tool.pixi.feature.dev.pypi-dependencies]
@@ -149,7 +151,6 @@ tomlkit = "==0.12.0"
 audioop-lts = "*"
 pydub = "*"
 open3d = ">=0.19.0,<0.20"
-fsspec = ">=2024.3,<2025.0"
 h5py = ">=3.11"
 py-opencv = ">=4.10.0"
 

@@ -31,7 +31,8 @@ BOX_PALETTE: UInt8[np.ndarray, "n_colors 4"] = np.array(
 )
 
 # Use a separate id range for segmentation classes to avoid clobbering the person class (id=0).
-SEG_CLASS_OFFSET = 1000  # background = 1000, persons start at 1001
+# Segmentation IDs use 100=background, 101-N for person instances (uint8 compatible, avoids keypoint IDs 0-70).
+SEG_CLASS_OFFSET: int = 100
 MAX_POINT_CLOUD_POINTS = 50_000
 MIN_DEPTH_CONFIDENCE = 0.5
 SEG_OVERLAY_ALPHA: int = 242  # ~0.95 opacity (242/255)
@@ -181,7 +182,7 @@ def set_annotation_context() -> None:
         keypoint_connections=MHR70_LINKS,
     )
 
-    # Segmentation classes: id=SEG_CLASS_OFFSET background, ids SEG_CLASS_OFFSET+1..n for each instance color.
+    # Segmentation classes: id=SEG_CLASS_OFFSET background, ids SEG_CLASS_OFFSET+1..n for instances.
     seg_classes: list[rr.ClassDescription] = [
         rr.ClassDescription(info=rr.AnnotationInfo(id=SEG_CLASS_OFFSET, label="Background", color=(64, 64, 64, 0))),
     ]
@@ -244,7 +245,7 @@ def visualize_sample(
     rr.log(f"{image_log_path}", rr.Image(rgb_hw3, color_model=rr.ColorModel.RGB).compress(jpeg_quality=90))
 
     # Build per-pixel segmentation map (SEG_CLASS_OFFSET = background).
-    seg_map: Int[ndarray, "h w"] = np.full((h, w), SEG_CLASS_OFFSET, dtype=np.int32)
+    seg_map: UInt8[ndarray, "h w"] = np.full((h, w), SEG_CLASS_OFFSET, dtype=np.uint8)
     human_mask: Bool[ndarray, "h w"] = np.zeros((h, w), dtype=bool)
 
     mesh_root_path: Path = parent_log_path / "pred"
@@ -291,8 +292,8 @@ def visualize_sample(
                 )
             mask_bool = mask_arr.astype(bool)
             human_mask = np.logical_or(human_mask, mask_bool)
-            seg_id = SEG_CLASS_OFFSET + i + 1  # keep person class (0) separate from seg classes
-            seg_map = np.where(mask_bool, np.uint16(seg_id), seg_map)
+            seg_id: int = SEG_CLASS_OFFSET + i + 1  # 100=background, 101-N for person instances
+            seg_map = np.where(mask_bool, np.uint8(seg_id), seg_map)
 
         # Log 3D keypoints in world coordinates
         cam_t: Float32[ndarray, "3"] = np.ascontiguousarray(output.pred_cam_t, dtype=np.float32)

@@ -15,11 +15,11 @@ import rerun as rr
 import rerun.blueprint as rrb
 import spaces
 from gradio_rerun import Rerun
-from jaxtyping import Bool, Float32, Int, UInt8
+from jaxtyping import Bool, Float32, UInt8
 from numpy import ndarray
 
 from sam3d_body.api.demo import SAM3Config, SAM3Predictor, SAM3Results
-from sam3d_body.api.visualization import SEG_OVERLAY_ALPHA
+from sam3d_body.api.visualization import SEG_CLASS_OFFSET, SEG_OVERLAY_ALPHA
 
 CFG: SAM3Config = SAM3Config()
 MODEL_E2E: SAM3Predictor = SAM3Predictor(config=CFG)
@@ -92,17 +92,17 @@ def sam3d_prediction_fn(
 
     h: int = int(img.shape[0])
     w: int = int(img.shape[1])
-    seg_map: Int[np.ndarray, "h w"] = np.zeros((h, w), dtype=np.uint16)
+    seg_map: UInt8[np.ndarray, "h w"] = np.full((h, w), SEG_CLASS_OFFSET, dtype=np.uint8)
 
     # Build a single segmentation image where each instance gets a unique id.
     for idx, segmask in enumerate(sam3_results.masks):
         mask: Float32[np.ndarray, "h w"] = np.asarray(segmask, dtype=np.float32).squeeze()
         mask_bool: Bool[np.ndarray, "h w"] = mask >= 0.5
-        class_id: int = idx + 1  # reserve 0 for background
-        seg_map = np.where(mask_bool, np.uint16(class_id), seg_map)
+        class_id: int = SEG_CLASS_OFFSET + idx + 1  # reserve SEG_CLASS_OFFSET for background
+        seg_map = np.where(mask_bool, np.uint8(class_id), seg_map)
 
     class_descriptions: list[rr.ClassDescription] = [
-        rr.ClassDescription(info=rr.AnnotationInfo(id=0, label="Background", color=(64, 64, 64, 0)))
+        rr.ClassDescription(info=rr.AnnotationInfo(id=SEG_CLASS_OFFSET, label="Background", color=(64, 64, 64, 0)))
     ]
     for idx, color_rgb in enumerate(BOX_PALETTE[:, :3].tolist(), start=1):
         color_rgba: tuple[int, int, int, int] = (
@@ -113,7 +113,7 @@ def sam3d_prediction_fn(
         )
         class_descriptions.append(
             rr.ClassDescription(
-                info=rr.AnnotationInfo(id=idx, label=f"Mask-{idx}", color=color_rgba)
+                info=rr.AnnotationInfo(id=SEG_CLASS_OFFSET + idx, label=f"Mask-{idx}", color=color_rgba)
             )
         )
 

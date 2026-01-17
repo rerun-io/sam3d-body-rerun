@@ -417,7 +417,7 @@ def main(cfg: Sam3VideoDemoConfig) -> None:
 
     # Log video asset once (much more efficient than per-frame images)
     frame_timestamps_ns: Int[ndarray, "num_frames"] = log_video(
-        video_path=cfg.video_path,
+        video_source=cfg.video_path,
         video_log_path=Path("video/raw"),
         timeline="video_time",
     )
