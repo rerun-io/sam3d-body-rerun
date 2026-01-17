@@ -35,7 +35,7 @@ from numpy import ndarray
 from torch import Tensor
 from simplecv.configs.exoego_dataset_configs import AnnotatedExoEgoDatasetUnion
 from simplecv.data.exoego.base_exoego import BaseExoEgoSequence, ExoEgoSample
-from simplecv.rerun_log_utils import RerunTyroConfig, log_pinhole
+from simplecv.rerun_log_utils import RerunTyroConfig, log_pinhole, log_video
 from tqdm import tqdm
 from transformers import Sam3VideoConfig, Sam3VideoModel, Sam3VideoProcessor
 
@@ -162,7 +162,7 @@ def _make_blueprint(exo_cam_names: list[str], max_exo_views: Literal[4, 8] = 8) 
                             origin=origin_base,
                             name=f"exo/{name}",
                             contents=[
-                                f"{origin_base}/image",
+                                f"{origin_base}/video",
                                 f"{origin_base}/boxes",
                                 f"{origin_base}/keypoints_2d",
                                 f"{origin_base}/segmentation_ids",
@@ -293,14 +293,17 @@ def _log_camera_outputs(
     *,
     pinhole_path: str,
     frame_idx: int,
-    frame_bgr: UInt8[ndarray, "h w 3"],
     seg_map: UInt8[ndarray, "h w"],
     boxes: Float32[ndarray, "n 4"] | None,
     scores: Float32[ndarray, "n"] | None,
+    timestamp_ns: int | None = None,
 ) -> None:
-    """Log per-camera image, segmentation, and boxes to Rerun."""
+    """Log per-camera segmentation and boxes to Rerun (video is logged as static asset)."""
+    # Sync with video_time timeline if timestamp available
+    if timestamp_ns is not None:
+        rr.set_time("video_time", duration=1e-9 * timestamp_ns)
     rr.set_time("frame_idx", sequence=frame_idx)
-    rr.log(f"{pinhole_path}/image", rr.Image(frame_bgr, color_model=rr.ColorModel.BGR).compress(jpeg_quality=85))
+    # Note: Video is logged once as AssetVideo, no per-frame image logging needed
     rr.log(f"{pinhole_path}/segmentation_ids", rr.SegmentationImage(seg_map))
 
     if boxes is None:
@@ -484,6 +487,31 @@ def main(cfg: Sam3MVBodyDemoConfig) -> None:
     _log_annotation_context()
     _log_cameras(sequence)
 
+    # Log video assets once (much more efficient than per-frame images)
+    # Pattern from simplecv/apis/view_exoego.py
+    video_timestamps: dict[str, Int[ndarray, "n_frames"]] = {}
+    timeline: str = "video_time"
+    if sequence.exo_sequence is not None:
+        exo_video_names: list[str] = sequence.exo_sequence.exo_video_names
+        exo_video_paths: list[Path] = sequence.exo_sequence.exo_video_paths
+        # Get video blobs if available (RRD sequences), otherwise use file paths (HoCap)
+        exo_video_blobs: dict[str, bytes] | None = getattr(sequence.exo_sequence, "_video_blobs", None)
+        for stream_name, video_file in zip(exo_video_names, exo_video_paths, strict=True):
+            video_log_path: Path = parent_log_path / "exo" / stream_name / "pinhole" / "video"
+            # Use blob if available (RRD), otherwise use file path (HoCap)
+            video_source: bytes | Path = (
+                exo_video_blobs[stream_name]
+                if exo_video_blobs and stream_name in exo_video_blobs
+                else video_file
+            )
+            # Skip if file path doesn't exist (shouldn't happen with blobs)
+            if isinstance(video_source, Path) and not video_source.exists():
+                continue
+            timestamps_ns: Int[ndarray, "n_frames"] = log_video(
+                video_source, video_log_path, timeline=timeline
+            )
+            video_timestamps[stream_name] = timestamps_ns
+
     total_frames: int = len(sequence)
     if cfg.max_frames is not None:
         total_frames = min(total_frames, cfg.max_frames)
@@ -576,14 +604,17 @@ def main(cfg: Sam3MVBodyDemoConfig) -> None:
                 seg_map, boxes, scores, masks_np = _prepare_segmentation_assets(frame_rgb, processed_outputs)
                 pinhole_path: Path = parent_log_path / "exo" / cam_params.name / "pinhole"
 
-                # Log 2D outputs for each camera
+                # Log 2D outputs for each camera (video is logged as asset, just overlays here)
+                cam_timestamp_ns: int | None = None
+                if cam_params.name in video_timestamps and frame_idx < len(video_timestamps[cam_params.name]):
+                    cam_timestamp_ns = int(video_timestamps[cam_params.name][frame_idx])
                 _log_camera_outputs(
                     pinhole_path=str(pinhole_path),
                     frame_idx=frame_idx,
-                    frame_bgr=frame_bgr,
                     seg_map=seg_map,
                     boxes=boxes,
                     scores=scores,
+                    timestamp_ns=cam_timestamp_ns,
                 )
 
                 # Run body estimation (single person assumption: take first detection)
